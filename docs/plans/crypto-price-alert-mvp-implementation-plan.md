@@ -131,7 +131,7 @@ Acceptance criteria:
 - UTC-to-`Asia/Ho_Chi_Minh` conversion is correct.
 - No period overlaps or crosses the sleep window.
 
-## Step 6 — Calculator — IN PROGRESS
+## Step 6 — Calculator — DONE
 
 Implement:
 
@@ -155,7 +155,7 @@ Acceptance criteria:
 - Invalid opening prices return errors.
 - Calculator unit tests pass.
 
-## Step 7 — Binance provider
+## Step 7 — Binance provider — IN PROGRESS
 
 - Implement a Binance public kline HTTP client.
 - Request candles by symbol, exchange interval, and period boundaries.
