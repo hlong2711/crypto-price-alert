@@ -47,7 +47,7 @@ Acceptance criteria:
 - Secrets are read from environment variables.
 - SIGINT/SIGTERM closes all resources cleanly.
 
-## Step 2 — Domain models and interfaces — IN PROGRESS
+## Step 2 — Domain models and interfaces — DONE
 
 Create domain types for `Candle`, `PriceChange`, `Interval`, `Period`, `Job`, `JobStatus`, and `Message`.
 
@@ -75,7 +75,7 @@ Acceptance criteria:
 - Interval and job status values are validated.
 - Interfaces can be exercised with fakes in unit tests.
 
-## Step 3 — PostgreSQL schema and GORM migration
+## Step 3 — PostgreSQL schema and GORM migration — IN PROGRESS
 
 - Create the `notification_jobs` model with ID, symbol, interval, period start/end, status, error message, sent/created/updated timestamps.
 - Add a unique constraint on `(symbol, interval, period_start)`.
