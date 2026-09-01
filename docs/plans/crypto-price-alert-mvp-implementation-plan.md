@@ -174,7 +174,7 @@ Acceptance criteria:
 - Non-retryable 4xx errors return immediately.
 - Fake-server tests cover success, malformed response, timeout, 5xx, and rate limiting.
 
-## Step 8 — Message builder — IN PROGRESS
+## Step 8 — Message builder — DONE
 
 - Build one aggregated message per interval and period.
 - Include interval and configured local period time.
@@ -191,7 +191,7 @@ Acceptance criteria:
 - Telegram and Slack contain equivalent information.
 - Messages contain no credentials or unsafe raw secrets.
 
-## Step 9 — Telegram and Slack notifiers
+## Step 9 — Telegram and Slack notifiers — IN PROGRESS
 
 - Implement Telegram Bot API notifier.
 - Implement Slack webhook notifier.
