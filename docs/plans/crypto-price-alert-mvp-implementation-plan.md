@@ -32,7 +32,7 @@ Acceptance criteria:
 - No secret is committed to the repository.
 - Package dependencies follow a one-way direction and domain code has no framework dependency.
 
-## Step 1 — Configuration and application lifecycle
+## Step 1 — Configuration and application lifecycle — DONE
 
 - Define configuration for timezone, HTTP address, PostgreSQL, Binance, symbols, intervals, active window, notification channels, retries, and concurrency.
 - Load YAML configuration with environment-variable overrides for secrets and deployment values.
@@ -47,7 +47,7 @@ Acceptance criteria:
 - Secrets are read from environment variables.
 - SIGINT/SIGTERM closes all resources cleanly.
 
-## Step 2 — Domain models and interfaces
+## Step 2 — Domain models and interfaces — IN PROGRESS
 
 Create domain types for `Candle`, `PriceChange`, `Interval`, `Period`, `Job`, `JobStatus`, and `Message`.
 
