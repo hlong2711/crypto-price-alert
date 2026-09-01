@@ -16,6 +16,7 @@ Implement a Go modular monolith with:
 The latest database decision supersedes the earlier `sqlc` choice: use GORM only for MVP data access.
 
 ## Step 0 — Bootstrap and plan alignment
+**Status: DONE**
 
 - Update remaining documentation references from `sqlc` to GORM.
 - Initialize the Go module.

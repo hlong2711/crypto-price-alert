@@ -4,7 +4,7 @@ app:
     address: :8080
 
 database:
-  url: ${DATABASE_URL}
+  url: "${DATABASE_URL}"
 
 market:
   provider: binance
@@ -23,11 +23,11 @@ schedule:
 notifications:
   telegram:
     enabled: false
-    bot_token: ${TELEGRAM_BOT_TOKEN}
-    chat_id: ${TELEGRAM_CHAT_ID}
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
   slack:
     enabled: false
-    webhook_url: ${SLACK_WEBHOOK_URL}
+    webhook_url: "${SLACK_WEBHOOK_URL}"
 
 retry:
   max_attempts: 3
