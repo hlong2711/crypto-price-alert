@@ -240,7 +240,7 @@ Acceptance criteria:
 - One symbol failure does not discard other symbols.
 - Scheduler tests use a controllable clock or period resolver.
 
-## Step 11 — Echo API and health check — IN PROGRESS
+## Step 11 — Echo API and health check — DONE
 
 - Initialize Echo as the HTTP server.
 - Add `GET /health` returning:
@@ -260,7 +260,7 @@ Acceptance criteria:
 - Handler panics are recovered and logged.
 - Health check works inside Docker.
 
-## Step 12 — Docker deployment
+## Step 12 — Docker deployment — IN PROGRESS
 
 - Create a multi-stage Dockerfile.
 - Create Docker Compose services for `crypto-alert` and `postgres`.

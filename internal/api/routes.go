@@ -8,7 +8,7 @@ import (
 func NewServer() *echo.Echo {
 	e := echo.New()
 	e.Use(middleware.Recover())
-	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{LogStatus: true, LogURI: true, LogMethod: true}))
+	e.Use(middleware.Logger())
 	handler := &Handler{}
 	e.GET("/health", handler.Health)
 	return e

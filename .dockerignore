@@ -1,0 +1,9 @@
+.git
+.gitignore
+.DS_Store
+.env
+.env.*
+!.env.example
+bin/
+tmp/
+coverage.out
