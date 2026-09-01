@@ -91,7 +91,7 @@ Acceptance criteria:
 - Data survives application restart.
 - Recreating the same job key cannot create a second record.
 
-## Step 4 — Repository and idempotency — IN PROGRESS
+## Step 4 — Repository and idempotency — DONE
 
 - Implement `PostgresRepository` with GORM.
 - Implement transaction-safe `CreateIfNotExists` behavior.
@@ -107,7 +107,7 @@ Acceptance criteria:
 - A failed job has status `failed` and an error reason.
 - Repository tests cover duplicate and concurrent creation.
 
-## Step 5 — Timezone and period engine
+## Step 5 — Timezone and period engine — DONE
 
 Implement:
 
@@ -131,7 +131,7 @@ Acceptance criteria:
 - UTC-to-`Asia/Ho_Chi_Minh` conversion is correct.
 - No period overlaps or crosses the sleep window.
 
-## Step 6 — Calculator
+## Step 6 — Calculator — IN PROGRESS
 
 Implement:
 
