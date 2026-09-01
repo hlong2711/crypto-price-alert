@@ -208,7 +208,7 @@ Acceptance criteria:
 - One channel failure does not crash the batch.
 - Retry count and final failure status are correct.
 
-## Step 10 — Scheduler and job execution — IN PROGRESS
+## Step 10 — Scheduler and job execution — DONE
 
 Use `robfig/cron` with the configured timezone.
 
@@ -240,7 +240,7 @@ Acceptance criteria:
 - One symbol failure does not discard other symbols.
 - Scheduler tests use a controllable clock or period resolver.
 
-## Step 11 — Echo API and health check
+## Step 11 — Echo API and health check — IN PROGRESS
 
 - Initialize Echo as the HTTP server.
 - Add `GET /health` returning:
