@@ -75,7 +75,7 @@ Acceptance criteria:
 - Interval and job status values are validated.
 - Interfaces can be exercised with fakes in unit tests.
 
-## Step 3 — PostgreSQL schema and GORM migration — IN PROGRESS
+## Step 3 — PostgreSQL schema and GORM migration — DONE
 
 - Create the `notification_jobs` model with ID, symbol, interval, period start/end, status, error message, sent/created/updated timestamps.
 - Add a unique constraint on `(symbol, interval, period_start)`.
@@ -91,7 +91,7 @@ Acceptance criteria:
 - Data survives application restart.
 - Recreating the same job key cannot create a second record.
 
-## Step 4 — Repository and idempotency
+## Step 4 — Repository and idempotency — IN PROGRESS
 
 - Implement `PostgresRepository` with GORM.
 - Implement transaction-safe `CreateIfNotExists` behavior.
