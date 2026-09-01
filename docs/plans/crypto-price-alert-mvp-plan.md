@@ -75,8 +75,9 @@ Không cần microservices, Kafka, RabbitMQ, Redis hoặc Kubernetes cho MVP.
 | Market data | Binance API |
 | Scheduler | Go scheduler hoặc `robfig/cron` |
 | Config | YAML + Environment Variables |
-| Database | SQLite |
-| HTTP | Go `net/http` |
+| Database | PostgreSQL |
+| Data access / ORM | `gorm` |
+| HTTP/API | Echo (`github.com/labstack/echo/v4`) |
 | Telegram | Telegram Bot API |
 | Slack | Slack Webhook |
 | Logging | `log/slog` |
@@ -349,9 +350,9 @@ Không commit secret vào Git.
 
 ---
 
-## 10. Database
+## 10. Database và data access
 
-MVP sử dụng SQLite.
+MVP sử dụng PostgreSQL. `gorm` được dùng để generate type-safe Go code từ SQL queries và migrations; không dùng ORM runtime khác.
 
 Mục đích chính là lưu trạng thái notification và đảm bảo idempotency.
 
@@ -396,17 +397,25 @@ type JobRepository interface {
 }
 ```
 
-MVP implementation:
-
-```text
-SQLiteRepository
-```
-
-Sau này có thể thay bằng:
+Thiết kế persistence:
 
 ```text
 PostgresRepository
+    │
+    └── generated Queries
 ```
+
+Các file liên quan:
+
+```text
+db/
+├── migrations/
+│   └── 001_init.sql
+├── queries/
+│   └── notification_jobs.sql
+```
+
+Unique constraint/index trên `(symbol, interval, period_start)` phải được enforce ở PostgreSQL. Repository nên dùng `INSERT ... ON CONFLICT DO NOTHING` để đảm bảo idempotency.
 
 ---
 
@@ -568,9 +577,9 @@ SLACK_WEBHOOK_URL
 
 ---
 
-## 16. Health check
+## 16. Health check và API server
 
-Thêm HTTP endpoint:
+Dùng Echo làm API/HTTP layer và thêm endpoint:
 
 ```text
 GET /health
@@ -589,6 +598,8 @@ Mục đích:
 - Docker health check.
 - VPS monitoring.
 - Kiểm tra process còn sống.
+
+Echo chỉ phụ trách routing, request handling và lifecycle của HTTP server; business logic và repository không phụ thuộc vào Echo.
 
 MVP chưa cần Prometheus.
 
@@ -627,12 +638,19 @@ crypto-alert/
 │   │   ├── telegram.go
 │   │   └── slack.go
 │   │
+│   ├── api/
+│   │   ├── handler.go
+│   │   └── routes.go
+│   │
 │   └── repository/
 │       ├── repository.go
-│       └── sqlite.go
+│       └── postgres.go
 │
 ├── migrations/
 │   └── 001_init.sql
+├── db/
+│   └── queries/
+│       └── notification_jobs.sql
 │
 ├── configs/
 │   └── config.example.yaml
@@ -703,15 +721,15 @@ VPS
  │
  └── Docker
       │
-      └── crypto-alert
-           ├── Go binary
-           ├── config
-           └── SQLite
+      ├── crypto-alert
+      │    ├── Go binary
+      │    └── config
+      └── postgres
 ```
 
 Không cần Kubernetes.
 
-Nếu sau này chuyển PostgreSQL:
+`docker-compose` dùng PostgreSQL ngay trong MVP:
 
 ```text
 docker-compose
@@ -738,7 +756,9 @@ docker-compose
 - [x] Telegram
 - [x] Slack adapter
 - [x] Aggregated notifications
-- [x] SQLite idempotency
+- [x] PostgreSQL idempotency
+- [x] Type-safe data access với `gorm`
+- [x] Echo API layer
 - [x] Retry
 - [x] Structured logging
 - [x] Health check
@@ -821,18 +841,21 @@ calculator
 notification
 ```
 
-### Step 7 — SQLite
+### Step 7 — PostgreSQL + GORM
 
 - Migration.
+- PostgreSQL connection/pool configuration.
+- SQL queries.
 - Job repository.
 - Idempotency.
 
-### Step 8 — Health check + Docker
+### Step 8 — Echo health check + Docker
 
-- `/health`
+- Khởi tạo Echo server.
+- Route `GET /health`.
 - Dockerfile.
 - docker-compose.
-- Persistent SQLite volume.
+- PostgreSQL service và persistent volume.
 
 ### Step 9 — End-to-end test
 
@@ -954,7 +977,7 @@ MVP nên giữ architecture:
                            ▼
                     ┌─────────────┐
                     │ Repository  │
-                    │ SQLite      │
+                    │ PostgreSQL  │
                     └──────┬──────┘
                            │
                            ▼
@@ -981,7 +1004,7 @@ Nhưng chỉ implement:
 BinanceProvider
 TelegramNotifier
 SlackNotifier
-SQLiteRepository
+PostgresRepository sử dụng GORM
 ```
 
 Điều này giữ codebase nhỏ nhưng vẫn có đường mở rộng rõ ràng.
