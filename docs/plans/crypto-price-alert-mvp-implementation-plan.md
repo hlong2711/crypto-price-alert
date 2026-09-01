@@ -155,7 +155,7 @@ Acceptance criteria:
 - Invalid opening prices return errors.
 - Calculator unit tests pass.
 
-## Step 7 — Binance provider — IN PROGRESS
+## Step 7 — Binance provider — DONE
 
 - Implement a Binance public kline HTTP client.
 - Request candles by symbol, exchange interval, and period boundaries.
@@ -174,7 +174,7 @@ Acceptance criteria:
 - Non-retryable 4xx errors return immediately.
 - Fake-server tests cover success, malformed response, timeout, 5xx, and rate limiting.
 
-## Step 8 — Message builder
+## Step 8 — Message builder — IN PROGRESS
 
 - Build one aggregated message per interval and period.
 - Include interval and configured local period time.

@@ -25,6 +25,16 @@ type Period struct {
 	End      time.Time
 }
 
+func (p Period) Validate() error {
+	if err := p.Interval.Validate(); err != nil {
+		return err
+	}
+	if p.Start.IsZero() || p.End.IsZero() || !p.End.After(p.Start) {
+		return fmt.Errorf("invalid period")
+	}
+	return nil
+}
+
 type Candle struct {
 	Symbol                 string
 	Open, High, Low, Close float64
