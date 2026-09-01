@@ -1,0 +1,37 @@
+app:
+  timezone: Asia/Ho_Chi_Minh
+  http:
+    address: :8080
+
+database:
+  url: ${DATABASE_URL}
+
+market:
+  provider: binance
+  symbols:
+    - BTCUSDT
+    - ETHUSDT
+    - SOLUSDT
+  intervals:
+    - 1h
+    - 4h
+
+schedule:
+  active_from: "06:00"
+  active_until: "23:00"
+
+notifications:
+  telegram:
+    enabled: false
+    bot_token: ${TELEGRAM_BOT_TOKEN}
+    chat_id: ${TELEGRAM_CHAT_ID}
+  slack:
+    enabled: false
+    webhook_url: ${SLACK_WEBHOOK_URL}
+
+retry:
+  max_attempts: 3
+  initial_backoff: 500ms
+
+concurrency:
+  market_requests: 5
