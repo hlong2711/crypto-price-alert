@@ -44,7 +44,10 @@ func BuildMessage(period domain.Period, results []PriceResult, location *time.Lo
 
 	title := fmt.Sprintf("📊 Crypto %s Update", period.Interval)
 	periodText := fmt.Sprintf("Period: %s → %s %s", period.Start.In(location).Format("15:04"), period.End.In(location).Format("15:04"), location.String())
-	return domain.Message{Title: title, Period: period, Lines: append([]string{periodText}, lines...)}, nil
+	return domain.Message{
+		Title:  title,
+		Period: period,
+		Lines:  append([]string{periodText}, lines...)}, nil
 }
 
 func RenderMessage(message domain.Message) string {

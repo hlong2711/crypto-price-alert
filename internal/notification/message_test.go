@@ -31,7 +31,14 @@ func TestBuildMessageAggregatesAndFormats(t *testing.T) {
 }
 
 func TestBuildMessageIncludesUnavailableSymbol(t *testing.T) {
-	message, err := BuildMessage(testPeriod(), []PriceResult{{Change: domain.PriceChange{Symbol: "ETHUSDT"}, Unavailable: true}}, testPeriod().Start.Location())
+	message, err := BuildMessage(testPeriod(),
+		[]PriceResult{
+			{
+				Change:      domain.PriceChange{Symbol: "ETHUSDT"},
+				Unavailable: true,
+			},
+		},
+		testPeriod().Start.Location())
 	if err != nil {
 		t.Fatal(err)
 	}
