@@ -191,7 +191,7 @@ Acceptance criteria:
 - Telegram and Slack contain equivalent information.
 - Messages contain no credentials or unsafe raw secrets.
 
-## Step 9 — Telegram and Slack notifiers — IN PROGRESS
+## Step 9 — Telegram and Slack notifiers — DONE
 
 - Implement Telegram Bot API notifier.
 - Implement Slack webhook notifier.
@@ -208,7 +208,7 @@ Acceptance criteria:
 - One channel failure does not crash the batch.
 - Retry count and final failure status are correct.
 
-## Step 10 — Scheduler and job execution
+## Step 10 — Scheduler and job execution — IN PROGRESS
 
 Use `robfig/cron` with the configured timezone.
 
