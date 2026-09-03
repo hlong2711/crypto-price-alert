@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"crypto-price-alert/internal/config"
+	"crypto-price-alert/internal/database"
 
 	"crypto-price-alert/internal/api"
 )
@@ -15,12 +16,19 @@ func main() {
 	if configPath == "" {
 		configPath = "configs/config.yaml"
 	}
-	if _, err := config.Load(configPath); err != nil {
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
 		logger.Error("failed to load configuration", "error", err)
 		os.Exit(1)
 	}
-
 	logger.Info("load config done")
+
+	dbUrl := cfg.Database.URL
+	_, err = database.InitDatabase(dbUrl)
+	if err == nil {
+		logger.Info("init db done")
+	}
 
 	initServer(logger)
 }

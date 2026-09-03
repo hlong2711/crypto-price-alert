@@ -35,3 +35,17 @@ func Close(db *gorm.DB) error {
 	}
 	return sqlDB.Close()
 }
+
+func InitDatabase(url string) (*gorm.DB, error) {
+	db, err := Open(url)
+	if err != nil {
+		return nil, fmt.Errorf("Open DB failed %w", err)
+	}
+
+	err = Migrate(db)
+	if err != nil {
+		return nil, fmt.Errorf("Migrate DB failed %w", err)
+	}
+
+	return db, nil
+}
