@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"crypto-price-alert/internal/config"
+
+	"crypto-price-alert/internal/api"
 )
 
 func main() {
@@ -19,4 +21,16 @@ func main() {
 	}
 
 	logger.Info("load config done")
+
+	initServer(logger)
+}
+
+func initServer(logger *slog.Logger) {
+	e := api.NewServer()
+
+	if e != nil {
+		logger.Info("server initialized successfully >>>")
+	}
+
+	e.Logger.Fatal(e.Start(":8080"))
 }
