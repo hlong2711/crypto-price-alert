@@ -41,6 +41,9 @@ func InitDatabase(url string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Open DB failed %w", err)
 	}
+	sql, err := db.DB()
+	sql.SetMaxIdleConns(2)
+	sql.SetMaxOpenConns(10)
 
 	err = Migrate(db)
 	if err != nil {

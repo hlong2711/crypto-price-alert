@@ -25,9 +25,10 @@ func main() {
 	logger.Info("load config done")
 
 	dbUrl := cfg.Database.URL
-	_, err = database.InitDatabase(dbUrl)
+	db, err := database.InitDatabase(dbUrl)
 	if err == nil {
 		logger.Info("init db done")
+		defer database.Close(db)
 	}
 
 	initServer(logger)
