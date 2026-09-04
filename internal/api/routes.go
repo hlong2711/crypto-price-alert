@@ -12,6 +12,6 @@ func NewServer() *echo.Echo {
 	e.Pre(middleware.RemoveTrailingSlash())
 
 	handler := &Handler{}
-	e.GET("/health", handler.Health)
+	e.GET("/api/health", handler.Health)
 	return e
 }

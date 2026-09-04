@@ -5,7 +5,7 @@ WORKDIR /app
 RUN apk update
 RUN apk add git
 
-RUN go install github.com/air-verse/air@v1.61.7
+RUN go install github.com/air-verse/air@v1.67.4
 
 # RUN addgroup -g 1000 -S app && \
   # adduser -u 1000 -S app -G app
