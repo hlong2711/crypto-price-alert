@@ -10,6 +10,7 @@ import (
 	"crypto-price-alert/internal/market"
 	"crypto-price-alert/internal/notification"
 	"crypto-price-alert/internal/repository"
+
 	"github.com/google/uuid"
 )
 
@@ -22,11 +23,24 @@ type Executor struct {
 	location   *time.Location
 }
 
-func NewExecutor(periods *PeriodEngine, provider market.MarketDataProvider, jobs repository.JobRepository, notifiers []notification.Notifier, symbols []string, location *time.Location) (*Executor, error) {
+func NewExecutor(periods *PeriodEngine,
+	provider market.MarketDataProvider,
+	jobs repository.JobRepository,
+	notifiers []notification.Notifier,
+	symbols []string,
+	location *time.Location) (*Executor, error) {
+
 	if periods == nil || provider == nil || jobs == nil || len(notifiers) == 0 || len(symbols) == 0 || location == nil {
 		return nil, fmt.Errorf("invalid executor settings")
 	}
-	return &Executor{periods: periods, market: provider, repository: jobs, notifiers: notifiers, symbols: symbols, location: location}, nil
+	return &Executor{
+		periods:    periods,
+		market:     provider,
+		repository: jobs,
+		notifiers:  notifiers,
+		symbols:    symbols,
+		location:   location,
+	}, nil
 }
 
 func (e *Executor) Execute(ctx context.Context, now time.Time, interval domain.Interval) error {
@@ -41,7 +55,13 @@ func (e *Executor) Execute(ctx context.Context, now time.Time, interval domain.I
 	}
 	items := make([]item, 0, len(e.symbols))
 	for _, symbol := range e.symbols {
-		job := domain.Job{ID: uuid.New().String(), Symbol: symbol, Interval: interval, PeriodStart: period.Start, PeriodEnd: period.End, Status: domain.JobPending}
+		job := domain.Job{
+			ID:          uuid.New().String(),
+			Symbol:      symbol,
+			Interval:    interval,
+			PeriodStart: period.Start,
+			PeriodEnd:   period.End,
+			Status:      domain.JobPending}
 		created, isNew, err := e.repository.CreateIfNotExists(ctx, job)
 		if err != nil {
 			return err
@@ -51,15 +71,28 @@ func (e *Executor) Execute(ctx context.Context, now time.Time, interval domain.I
 		}
 		candle, err := e.market.GetKline(ctx, symbol, interval, period.Start, period.End)
 		if err != nil {
-			items = append(items, item{symbol: symbol, job: created, result: notification.PriceResult{Change: domain.PriceChange{Symbol: symbol}, Unavailable: true}})
+			items = append(items, item{
+				symbol: symbol,
+				job:    created,
+				result: notification.PriceResult{
+					Change:      domain.PriceChange{Symbol: symbol},
+					Unavailable: true}})
 			continue
 		}
 		change, err := calculateChange(candle, interval, period)
 		if err != nil {
-			items = append(items, item{symbol: symbol, job: created, result: notification.PriceResult{Change: domain.PriceChange{Symbol: symbol}, Unavailable: true}})
+			items = append(items, item{
+				symbol: symbol,
+				job:    created,
+				result: notification.PriceResult{
+					Change:      domain.PriceChange{Symbol: symbol},
+					Unavailable: true}})
 			continue
 		}
-		items = append(items, item{symbol: symbol, job: created, result: notification.PriceResult{Change: change}})
+		items = append(items, item{
+			symbol: symbol,
+			job:    created,
+			result: notification.PriceResult{Change: change}})
 	}
 	if len(items) == 0 {
 		return nil

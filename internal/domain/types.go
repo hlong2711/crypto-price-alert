@@ -42,7 +42,13 @@ type Candle struct {
 }
 
 func (c Candle) Validate() error {
-	if c.Symbol == "" || c.Open <= 0 || c.High <= 0 || c.Low <= 0 || c.Close <= 0 || c.OpenTime.IsZero() || c.CloseTime.IsZero() || !c.CloseTime.After(c.OpenTime) || c.High < c.Open || c.High < c.Close || c.Low > c.Open || c.Low > c.Close || c.High < c.Low {
+	if c.Symbol == "" || c.Open <= 0 ||
+		c.High <= 0 || c.Low <= 0 ||
+		c.Close <= 0 ||
+		c.OpenTime.IsZero() || c.CloseTime.IsZero() || !c.CloseTime.After(c.OpenTime) ||
+		c.High < c.Open || c.High < c.Close ||
+		c.Low > c.Open || c.Low > c.Close ||
+		c.High < c.Low {
 		return fmt.Errorf("invalid candle")
 	}
 	return nil

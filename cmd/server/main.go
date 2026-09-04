@@ -1,13 +1,19 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
-
-	"crypto-price-alert/internal/config"
-	"crypto-price-alert/internal/database"
+	"time"
 
 	"crypto-price-alert/internal/api"
+	"crypto-price-alert/internal/config"
+	"crypto-price-alert/internal/database"
+	"crypto-price-alert/internal/market"
+	"crypto-price-alert/internal/notification"
+	"crypto-price-alert/internal/repository"
+	"crypto-price-alert/internal/scheduler"
 )
 
 func main() {
@@ -24,22 +30,112 @@ func main() {
 	}
 	logger.Info("load config done")
 
-	dbUrl := cfg.Database.URL
-	db, err := database.InitDatabase(dbUrl)
-	if err == nil {
-		logger.Info("init db done")
-		defer database.Close(db)
+	db, err := database.InitDatabase(cfg.Database.URL)
+	if err != nil {
+		logger.Error("failed to initialize database", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("init db done")
+	defer database.Close(db)
+
+	location, err := time.LoadLocation(cfg.App.Timezone)
+	if err != nil {
+		logger.Error("failed to load timezone", "error", err)
+		os.Exit(1)
 	}
 
-	initServer(logger)
+	jobRepo, err := repository.NewPostgresRepository(db)
+	if err != nil {
+		logger.Error("failed to initialize job repository", "error", err)
+		os.Exit(1)
+	}
+
+	provider, err := market.NewBinanceProvider(
+		"",
+		&http.Client{Timeout: 10 * time.Second},
+		cfg.Retry.MaxAttempts,
+		cfg.Retry.InitialBackoff,
+		cfg.Concurrency.MarketRequests,
+	)
+	if err != nil {
+		logger.Error("failed to initialize market provider", "error", err)
+		os.Exit(1)
+	}
+
+	notifiers, err := newNotifiers(cfg)
+	if err != nil {
+		logger.Error("failed to initialize notification channels", "error", err)
+		os.Exit(1)
+	}
+
+	periods, err := scheduler.NewPeriodEngine(location)
+	if err != nil {
+		logger.Error("failed to initialize period engine", "error", err)
+		os.Exit(1)
+	}
+	executor, err := scheduler.NewExecutor(periods, provider, jobRepo, notifiers, cfg.Market.Symbols, location)
+	if err != nil {
+		logger.Error("failed to initialize scheduler executor", "error", err)
+		os.Exit(1)
+	}
+	jobScheduler, err := scheduler.NewScheduler(location, executor)
+	if err != nil {
+		logger.Error("failed to initialize scheduler", "error", err)
+		os.Exit(1)
+	}
+	jobScheduler.Start()
+	defer func() {
+		if err := jobScheduler.Stop().Err(); err != nil {
+			logger.Error("scheduler shutdown failed", "error", err)
+		}
+	}()
+	logger.Info("scheduler started", "timezone", cfg.App.Timezone)
+
+	initServer(logger, cfg.App.HTTP.Address)
 }
 
-func initServer(logger *slog.Logger) {
-	e := api.NewServer()
-
-	if e != nil {
-		logger.Info("server initialized successfully >>>")
+func newNotifiers(cfg config.Config) ([]notification.Notifier, error) {
+	notifiers := make([]notification.Notifier, 0, 2)
+	if cfg.Notifications.Telegram.Enabled {
+		notifier, err := notification.NewTelegramNotifier(
+			cfg.Notifications.Telegram.BotToken,
+			cfg.Notifications.Telegram.ChatID,
+			"",
+			nil,
+			cfg.Retry.MaxAttempts,
+			cfg.Retry.InitialBackoff,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("telegram: %w", err)
+		}
+		notifiers = append(notifiers, notifier)
 	}
 
-	e.Logger.Fatal(e.Start(":8080"))
+	if cfg.Notifications.Slack.Enabled {
+		notifier, err := notification.NewSlackNotifier(
+			cfg.Notifications.Slack.WebhookURL,
+			nil,
+			cfg.Retry.MaxAttempts,
+			cfg.Retry.InitialBackoff,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("slack: %w", err)
+		}
+		notifiers = append(notifiers, notifier)
+	}
+	if len(notifiers) == 0 {
+		return nil, fmt.Errorf("no notification channels are enabled")
+	}
+	return notifiers, nil
+}
+
+func initServer(logger *slog.Logger, address string) {
+	e := api.NewServer()
+
+	logger.Info("server initialized successfully", "address", address)
+
+	if err := e.Start(address); err != nil && err != http.ErrServerClosed {
+		logger.Error("server stopped unexpectedly", "error", err)
+		os.Exit(1)
+	}
 }
