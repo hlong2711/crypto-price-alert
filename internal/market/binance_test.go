@@ -31,8 +31,22 @@ func response(status int, body string) *http.Response {
 
 const klineJSON = `[["1756681200000","100","110","90","105","0","1756684799999","0"]]`
 
+const numericKlineJSON = `[[1756681200000,100,110,90,105,0,1756684799999,0]]`
+
 func TestBinanceProviderGetKline(t *testing.T) {
 	provider := testProvider(t, func(r *http.Request) (*http.Response, error) { return response(http.StatusOK, klineJSON), nil })
+	start := time.UnixMilli(1756681200000)
+	candle, err := provider.GetKline(context.Background(), "BTCUSDT", domain.Interval1H, start, start.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if candle.Symbol != "BTCUSDT" || candle.Open != 100 || candle.Close != 105 {
+		t.Fatalf("unexpected candle: %+v", candle)
+	}
+}
+
+func TestBinanceProviderGetKlineWithNumericValues(t *testing.T) {
+	provider := testProvider(t, func(r *http.Request) (*http.Response, error) { return response(http.StatusOK, numericKlineJSON), nil })
 	start := time.UnixMilli(1756681200000)
 	candle, err := provider.GetKline(context.Background(), "BTCUSDT", domain.Interval1H, start, start.Add(time.Hour))
 	if err != nil {

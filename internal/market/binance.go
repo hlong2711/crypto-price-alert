@@ -95,6 +95,24 @@ func (p *BinanceProvider) request(ctx context.Context, url, symbol string, start
 		return domain.Candle{}, false, fmt.Errorf("Binance HTTP status %d: %s", resp.StatusCode, string(body))
 	}
 
+	/* response format:
+	[
+		[
+			1499040000000,
+			"0.01634790",
+			"0.80000000",
+			"0.01575800",
+			"0.01577100",
+			"148976.11427815",
+			1499644799999,
+			"2434.19055334",
+			308,
+			"1756.87402397",
+			"28.46694368",
+			"0"
+		]
+	]
+	*/
 	var rows [][]json.RawMessage
 	if err := json.Unmarshal(body, &rows); err != nil {
 		return domain.Candle{}, false, fmt.Errorf("decode Binance kline response: %w", err)
@@ -104,8 +122,13 @@ func (p *BinanceProvider) request(ctx context.Context, url, symbol string, start
 	}
 	values := make([]string, 7)
 	for i := range values {
-		if err := json.Unmarshal(rows[0][i], &values[i]); err != nil {
-			return domain.Candle{}, false, fmt.Errorf("decode Binance kline value %d: %w", i, err)
+		rawValue := rows[0][i]
+		if len(rawValue) > 0 && rawValue[0] == '"' {
+			if err := json.Unmarshal(rawValue, &values[i]); err != nil {
+				return domain.Candle{}, false, fmt.Errorf("decode Binance kline value %d: %w", i, err)
+			}
+		} else {
+			values[i] = string(rawValue)
 		}
 	}
 	openTimeMS, err := strconv.ParseInt(values[0], 10, 64)
