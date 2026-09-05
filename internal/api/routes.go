@@ -1,17 +1,21 @@
 package api
 
 import (
+	"crypto-price-alert/internal/scheduler"
+	"crypto-price-alert/internal/service"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
-func NewServer() *echo.Echo {
+func NewServer(alerts *service.AlertService, periods *scheduler.PeriodEngine) *echo.Echo {
 	e := echo.New()
 	e.Use(middleware.Recover())
 	e.Use(middleware.Logger())
 	e.Pre(middleware.RemoveTrailingSlash())
 
-	handler := &Handler{}
+	handler := NewHandler(alerts, periods)
 	e.GET("/api/health", handler.Health)
+	e.POST("/api/v1/alerts/run", handler.RunAlert)
 	return e
 }

@@ -14,6 +14,7 @@ import (
 	"crypto-price-alert/internal/notification"
 	"crypto-price-alert/internal/repository"
 	"crypto-price-alert/internal/scheduler"
+	"crypto-price-alert/internal/service"
 )
 
 func main() {
@@ -91,7 +92,13 @@ func main() {
 	}()
 	logger.Info("scheduler started", "timezone", cfg.App.Timezone)
 
-	initServer(logger, cfg.App.HTTP.Address)
+	alertService, err := service.NewAlertService(provider, notifiers, notifierNames(cfg), cfg.Market.Symbols, location)
+	if err != nil {
+		logger.Error("failed to initialize alert service", "error", err)
+		os.Exit(1)
+	}
+
+	initServer(logger, cfg.App.HTTP.Address, alertService, periods)
 }
 
 func newNotifiers(cfg config.Config) ([]notification.Notifier, error) {
@@ -129,8 +136,20 @@ func newNotifiers(cfg config.Config) ([]notification.Notifier, error) {
 	return notifiers, nil
 }
 
-func initServer(logger *slog.Logger, address string) {
-	e := api.NewServer()
+/* Get name list of enabled notifiers */
+func notifierNames(cfg config.Config) []string {
+	names := make([]string, 0, 2)
+	if cfg.Notifications.Telegram.Enabled {
+		names = append(names, "telegram")
+	}
+	if cfg.Notifications.Slack.Enabled {
+		names = append(names, "slack")
+	}
+	return names
+}
+
+func initServer(logger *slog.Logger, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine) {
+	e := api.NewServer(alerts, periods)
 
 	logger.Info("server initialized successfully", "address", address)
 
