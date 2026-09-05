@@ -79,6 +79,7 @@ func main() {
 		logger.Error("failed to initialize scheduler executor", "error", err)
 		os.Exit(1)
 	}
+
 	jobScheduler, err := scheduler.NewScheduler(location, executor)
 	if err != nil {
 		logger.Error("failed to initialize scheduler", "error", err)

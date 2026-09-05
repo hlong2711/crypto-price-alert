@@ -47,7 +47,7 @@ func (p *BinanceProvider) GetKline(ctx context.Context, symbol string, interval 
 	}
 	select {
 	case p.semaphore <- struct{}{}:
-		defer func() { <-p.semaphore }()
+		defer func() { <-p.semaphore }() //limit concurrency
 	case <-ctx.Done():
 		return domain.Candle{}, ctx.Err()
 	}

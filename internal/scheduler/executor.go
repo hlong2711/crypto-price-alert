@@ -10,6 +10,7 @@ import (
 	"crypto-price-alert/internal/market"
 	"crypto-price-alert/internal/notification"
 	"crypto-price-alert/internal/repository"
+	"crypto-price-alert/internal/service"
 
 	"github.com/google/uuid"
 )
@@ -129,11 +130,5 @@ func (e *Executor) Execute(ctx context.Context, now time.Time, interval domain.I
 }
 
 func calculateChange(candle domain.Candle, interval domain.Interval, period domain.Period) (domain.PriceChange, error) {
-	if err := candle.Validate(); err != nil {
-		return domain.PriceChange{}, err
-	}
-	if candle.OpenTime.Before(period.Start) || candle.CloseTime.After(period.End.Add(time.Second)) {
-		return domain.PriceChange{}, fmt.Errorf("candle does not match period")
-	}
-	return domain.PriceChange{Symbol: candle.Symbol, Interval: interval, Open: candle.Open, Close: candle.Close, ChangePct: (candle.Close - candle.Open) / candle.Open * 100, StartTime: period.Start, EndTime: period.End}, nil
+	return service.CalculateChange(candle, interval, period)
 }

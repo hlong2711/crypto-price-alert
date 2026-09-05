@@ -104,7 +104,10 @@ func (s *AlertService) Run(ctx context.Context, interval domain.Interval, period
 		}
 		priceResults = append(priceResults, notification.PriceResult{Change: change})
 		symbolResults = append(symbolResults, SymbolResult{
-			Symbol: symbol, Open: change.Open, Close: change.Close, ChangePct: change.ChangePct,
+			Symbol:    symbol,
+			Open:      change.Open,
+			Close:     change.Close,
+			ChangePct: change.ChangePct,
 		})
 	}
 	if len(priceResults) == 0 {
@@ -145,7 +148,6 @@ func (s *AlertService) Run(ctx context.Context, interval domain.Interval, period
 	return result, nil
 }
 
-// CalculateChange mirrors the scheduler executor logic so both paths stay consistent.
 func CalculateChange(candle domain.Candle, interval domain.Interval, period domain.Period) (domain.PriceChange, error) {
 	if err := candle.Validate(); err != nil {
 		return domain.PriceChange{}, err
