@@ -1,7 +1,7 @@
 app:
   timezone: Asia/Ho_Chi_Minh
   http:
-    address: :8080
+    address: :1323
 
 database:
   url: "${DATABASE_URL}"
