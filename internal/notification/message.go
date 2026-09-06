@@ -3,6 +3,7 @@ package notification
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -65,5 +66,7 @@ func formatPrice(value float64) string {
 }
 
 func formatVolume(value float64) string {
-	return fmt.Sprintf("%.8f", value)
+	formatted := strconv.FormatFloat(value, 'f', 5, 64)
+	formatted = strings.TrimRight(formatted, "0")
+	return strings.TrimRight(formatted, ".")
 }
