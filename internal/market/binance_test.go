@@ -29,9 +29,9 @@ func response(status int, body string) *http.Response {
 	return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}
 }
 
-const klineJSON = `[["1756681200000","100","110","90","105","0","1756684799999","0"]]`
+const klineJSON = `[["1756681200000","100","110","90","105","1234.5","1756684799999","0"]]`
 
-const numericKlineJSON = `[[1756681200000,100,110,90,105,0,1756684799999,0]]`
+const numericKlineJSON = `[[1756681200000,100,110,90,105,678.9,1756684799999,0]]`
 
 func TestBinanceProviderGetKline(t *testing.T) {
 	provider := testProvider(t, func(r *http.Request) (*http.Response, error) { return response(http.StatusOK, klineJSON), nil })
@@ -40,7 +40,7 @@ func TestBinanceProviderGetKline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if candle.Symbol != "BTCUSDT" || candle.Open != 100 || candle.Close != 105 {
+	if candle.Symbol != "BTCUSDT" || candle.Open != 100 || candle.Close != 105 || candle.Volume != 1234.5 {
 		t.Fatalf("unexpected candle: %+v", candle)
 	}
 }
@@ -52,7 +52,7 @@ func TestBinanceProviderGetKlineWithNumericValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if candle.Symbol != "BTCUSDT" || candle.Open != 100 || candle.Close != 105 {
+	if candle.Symbol != "BTCUSDT" || candle.Open != 100 || candle.Close != 105 || candle.Volume != 678.9 {
 		t.Fatalf("unexpected candle: %+v", candle)
 	}
 }

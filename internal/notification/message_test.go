@@ -16,14 +16,14 @@ func testPeriod() domain.Period {
 
 func TestBuildMessageAggregatesAndFormats(t *testing.T) {
 	message, err := BuildMessage(testPeriod(), []PriceResult{
-		{Change: domain.PriceChange{Symbol: "BTCUSDT", Close: 108420, ChangePct: 1.82}},
-		{Change: domain.PriceChange{Symbol: "SOLUSDT", Close: 198.32, ChangePct: -2.13}},
+		{Change: domain.PriceChange{Symbol: "BTCUSDT", Close: 108420, ChangePct: 1.82, Volume: 148976.11427815}},
+		{Change: domain.PriceChange{Symbol: "SOLUSDT", Close: 198.32, ChangePct: -2.13, Volume: 52340.25}},
 	}, testPeriod().Start.Location())
 	if err != nil {
 		t.Fatal(err)
 	}
 	rendered := RenderMessage(message)
-	for _, expected := range []string{"📊 Crypto 1h Update", "Period: 09:00 → 10:00 Asia/Ho_Chi_Minh", "BTCUSDT", "$108420.00", "+1.82% 🟢", "SOLUSDT", "-2.13% 🔴"} {
+	for _, expected := range []string{"📊 Crypto 1h Update", "Period: 09:00 → 10:00 Asia/Ho_Chi_Minh", "BTCUSDT", "$108420.00", "+1.82% 🟢", "Vol: 148976.11427815", "SOLUSDT", "-2.13% 🔴", "Vol: 52340.25000000"} {
 		if !strings.Contains(rendered, expected) {
 			t.Fatalf("message missing %q: %s", expected, rendered)
 		}

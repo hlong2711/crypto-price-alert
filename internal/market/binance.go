@@ -162,12 +162,17 @@ func (p *BinanceProvider) request(ctx context.Context, url, symbol string, start
 	if err != nil {
 		return domain.Candle{}, false, err
 	}
+	volume, err := parsePrice(values[5], "volume")
+	if err != nil {
+		return domain.Candle{}, false, err
+	}
 	candle := domain.Candle{
 		Symbol:    symbol,
 		Open:      open,
 		High:      high,
 		Low:       low,
 		Close:     close,
+		Volume:    volume,
 		OpenTime:  time.UnixMilli(openTimeMS),
 		CloseTime: time.UnixMilli(closeTimeMS),
 	}

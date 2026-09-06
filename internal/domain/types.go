@@ -36,15 +36,16 @@ func (p Period) Validate() error {
 }
 
 type Candle struct {
-	Symbol                 string
-	Open, High, Low, Close float64
-	OpenTime, CloseTime    time.Time
+	Symbol                         string
+	Open, High, Low, Close, Volume float64
+	OpenTime, CloseTime            time.Time
 }
 
 func (c Candle) Validate() error {
 	if c.Symbol == "" || c.Open <= 0 ||
 		c.High <= 0 || c.Low <= 0 ||
 		c.Close <= 0 ||
+		c.Volume < 0 ||
 		c.OpenTime.IsZero() || c.CloseTime.IsZero() || !c.CloseTime.After(c.OpenTime) ||
 		c.High < c.Open || c.High < c.Close ||
 		c.Low > c.Open || c.Low > c.Close ||
@@ -55,10 +56,10 @@ func (c Candle) Validate() error {
 }
 
 type PriceChange struct {
-	Symbol                 string
-	Interval               Interval
-	Open, Close, ChangePct float64
-	StartTime, EndTime     time.Time
+	Symbol                         string
+	Interval                       Interval
+	Open, Close, ChangePct, Volume float64
+	StartTime, EndTime             time.Time
 }
 
 type JobStatus string

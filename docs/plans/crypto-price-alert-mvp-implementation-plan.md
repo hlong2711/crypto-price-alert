@@ -178,7 +178,7 @@ Acceptance criteria:
 
 - Build one aggregated message per interval and period.
 - Include interval and configured local period time.
-- Include symbol, close price, change percentage, and up/down indicator.
+- Include symbol, close price, change percentage, trade volume, and up/down indicator.
 - Include `unavailable` for symbols whose market request failed.
 - Format prices and percentages consistently.
 - Escape content appropriately for Telegram and Slack.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -120,7 +121,7 @@ func TestRunAlertDryRun(t *testing.T) {
 	start := time.Date(2026, 9, 4, 9, 0, 0, 0, loc)
 	end := time.Date(2026, 9, 4, 10, 0, 0, 0, loc)
 	candle := domain.Candle{Symbol: "BTCUSDT", Open: 100, High: 102, Low: 99, Close: 101,
-		OpenTime: start.Add(time.Minute), CloseTime: end.Add(-time.Second)}
+		Volume: 1234, OpenTime: start.Add(time.Minute), CloseTime: end.Add(-time.Second)}
 	var sent int
 	alerts, periods := testDeps(t, stubProvider{candle: candle}, &sent)
 	e := NewServer(alerts, periods)
@@ -131,6 +132,9 @@ func TestRunAlertDryRun(t *testing.T) {
 	}
 	if sent != 0 {
 		t.Fatalf("dry_run sent %d notifications, want 0", sent)
+	}
+	if !strings.Contains(record.Body.String(), `"volume":1234`) {
+		t.Fatalf("response missing volume: %s", record.Body.String())
 	}
 }
 

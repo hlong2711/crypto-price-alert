@@ -17,7 +17,10 @@ func TestDomainValidation(t *testing.T) {
 	if err := job.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if err := (Candle{Symbol: "BTCUSDT", Open: 100, High: 110, Low: 90, Close: 105, OpenTime: now, CloseTime: now.Add(time.Hour)}).Validate(); err != nil {
+	if err := (Candle{Symbol: "BTCUSDT", Open: 100, High: 110, Low: 90, Close: 105, Volume: 1234, OpenTime: now, CloseTime: now.Add(time.Hour)}).Validate(); err != nil {
 		t.Fatal(err)
+	}
+	if err := (Candle{Symbol: "BTCUSDT", Open: 100, High: 110, Low: 90, Close: 105, Volume: -1, OpenTime: now, CloseTime: now.Add(time.Hour)}).Validate(); err == nil {
+		t.Fatal("expected negative volume to be rejected")
 	}
 }

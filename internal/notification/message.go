@@ -39,7 +39,7 @@ func BuildMessage(period domain.Period, results []PriceResult, location *time.Lo
 		if result.Change.ChangePct < 0 {
 			icon = "🔴"
 		}
-		lines = append(lines, fmt.Sprintf("%-8s $%s %+.2f%% %s", result.Change.Symbol, formatPrice(result.Change.Close), result.Change.ChangePct, icon))
+		lines = append(lines, fmt.Sprintf("%-8s $%s %+.2f%% %s Vol: %s", result.Change.Symbol, formatPrice(result.Change.Close), result.Change.ChangePct, icon, formatVolume(result.Change.Volume)))
 	}
 
 	title := fmt.Sprintf("📊 Crypto %s Update", period.Interval)
@@ -61,5 +61,9 @@ func formatPrice(value float64) string {
 	if value >= 1 {
 		return fmt.Sprintf("%.4f", value)
 	}
+	return fmt.Sprintf("%.8f", value)
+}
+
+func formatVolume(value float64) string {
 	return fmt.Sprintf("%.8f", value)
 }

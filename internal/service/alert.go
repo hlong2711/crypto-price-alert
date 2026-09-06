@@ -16,6 +16,7 @@ type SymbolResult struct {
 	Open        float64 `json:"open"`
 	Close       float64 `json:"close"`
 	ChangePct   float64 `json:"change_pct"`
+	Volume      float64 `json:"volume"`
 	Unavailable bool    `json:"unavailable"`
 	Error       string  `json:"error,omitempty"`
 }
@@ -108,6 +109,7 @@ func (s *AlertService) Run(ctx context.Context, interval domain.Interval, period
 			Open:      change.Open,
 			Close:     change.Close,
 			ChangePct: change.ChangePct,
+			Volume:    change.Volume,
 		})
 	}
 	if len(priceResults) == 0 {
@@ -161,6 +163,7 @@ func CalculateChange(candle domain.Candle, interval domain.Interval, period doma
 		Open:      candle.Open,
 		Close:     candle.Close,
 		ChangePct: (candle.Close - candle.Open) / candle.Open * 100,
+		Volume:    candle.Volume,
 		StartTime: period.Start,
 		EndTime:   period.End,
 	}, nil
