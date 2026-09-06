@@ -15,7 +15,7 @@ RUN addgroup -S app && adduser -S -G app app
 WORKDIR /app
 
 COPY --from=builder /out/crypto-alert /app/crypto-alert
-COPY configs/config.example.yaml /app/configs/config.yaml
+COPY configs/config.yaml /app/configs/config.yaml
 
 USER app
 EXPOSE 8080
