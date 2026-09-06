@@ -64,6 +64,7 @@ schedule:
   active_from: "06:00"
   active_until: "23:00"
 notifications:
+  dry: true
   telegram:
     enabled: true
     bot_token: token
@@ -83,5 +84,8 @@ concurrency:
 	}
 	if cfg.Database.URL != "postgres://example/crypto_alert" {
 		t.Fatalf("unexpected database URL: %q", cfg.Database.URL)
+	}
+	if !cfg.Notifications.Dry {
+		t.Fatal("expected notifications.dry to be true")
 	}
 }

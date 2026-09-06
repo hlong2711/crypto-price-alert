@@ -21,6 +21,8 @@ schedule:
   active_until: "23:00"
 
 notifications:
+  # When true, messages are logged instead of sent to Telegram or Slack.
+  dry: false
   telegram:
     enabled: false
     bot_token: "${TELEGRAM_BOT_TOKEN}"

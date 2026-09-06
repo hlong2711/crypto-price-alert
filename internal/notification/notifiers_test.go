@@ -1,13 +1,30 @@
 package notification
 
 import (
+	"bytes"
 	"context"
+	"crypto-price-alert/internal/domain"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestDryRunNotifierLogsWithoutSending(t *testing.T) {
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	notifier := NewDryRunNotifier("telegram", logger)
+
+	message := domain.Message{Title: "hello"}
+	if err := notifier.Send(context.Background(), message); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "notification dry run") || !strings.Contains(logs.String(), "hello") {
+		t.Fatalf("unexpected dry-run log: %s", logs.String())
+	}
+}
 
 type notifierRoundTripper func(*http.Request) (*http.Response, error)
 

@@ -63,7 +63,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	notifiers, err := newNotifiers(cfg)
+	notifiers, err := newNotifiers(cfg, logger)
 	if err != nil {
 		logger.Error("failed to initialize notification channels", "error", err)
 		os.Exit(1)
@@ -102,32 +102,44 @@ func main() {
 	initServer(logger, cfg.App.HTTP.Address, alertService, periods)
 }
 
-func newNotifiers(cfg config.Config) ([]notification.Notifier, error) {
+func newNotifiers(cfg config.Config, logger *slog.Logger) ([]notification.Notifier, error) {
 	notifiers := make([]notification.Notifier, 0, 2)
 	if cfg.Notifications.Telegram.Enabled {
-		notifier, err := notification.NewTelegramNotifier(
-			cfg.Notifications.Telegram.BotToken,
-			cfg.Notifications.Telegram.ChatID,
-			"",
-			nil,
-			cfg.Retry.MaxAttempts,
-			cfg.Retry.InitialBackoff,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("telegram: %w", err)
+		var notifier notification.Notifier
+		if cfg.Notifications.Dry {
+			notifier = notification.NewDryRunNotifier("telegram", logger)
+		} else {
+			telegram, err := notification.NewTelegramNotifier(
+				cfg.Notifications.Telegram.BotToken,
+				cfg.Notifications.Telegram.ChatID,
+				"",
+				nil,
+				cfg.Retry.MaxAttempts,
+				cfg.Retry.InitialBackoff,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("telegram: %w", err)
+			}
+			notifier = telegram
 		}
 		notifiers = append(notifiers, notifier)
 	}
 
 	if cfg.Notifications.Slack.Enabled {
-		notifier, err := notification.NewSlackNotifier(
-			cfg.Notifications.Slack.WebhookURL,
-			nil,
-			cfg.Retry.MaxAttempts,
-			cfg.Retry.InitialBackoff,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("slack: %w", err)
+		var notifier notification.Notifier
+		if cfg.Notifications.Dry {
+			notifier = notification.NewDryRunNotifier("slack", logger)
+		} else {
+			slack, err := notification.NewSlackNotifier(
+				cfg.Notifications.Slack.WebhookURL,
+				nil,
+				cfg.Retry.MaxAttempts,
+				cfg.Retry.InitialBackoff,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("slack: %w", err)
+			}
+			notifier = slack
 		}
 		notifiers = append(notifiers, notifier)
 	}

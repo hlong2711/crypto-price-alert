@@ -20,7 +20,7 @@ import (
 func TestHealth(t *testing.T) {
 	e := echo.New()
 	record := httptest.NewRecorder()
-	request := httptest.NewRequest("GET", "/health", nil)
+	request := httptest.NewRequest("GET", "/api/health", nil)
 	ctx := e.NewContext(request, record)
 	if err := NewHandler(nil, nil).Health(ctx); err != nil {
 		t.Fatal(err)

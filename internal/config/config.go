@@ -46,6 +46,7 @@ type ScheduleConfig struct {
 }
 
 type NotificationsConfig struct {
+	Dry      bool           `yaml:"dry"`
 	Telegram TelegramConfig `yaml:"telegram"`
 	Slack    SlackConfig    `yaml:"slack"`
 }
