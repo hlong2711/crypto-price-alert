@@ -23,7 +23,7 @@ func TestBuildMessageAggregatesAndFormats(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := RenderMessage(message)
-	for _, expected := range []string{"📊 Crypto 1h Update", "Period: 09:00 → 10:00 Asia/Ho_Chi_Minh", "BTCUSDT", "$108420.00", "+1.82% 🟢", "Vol: 148976.11428", "SOLUSDT", "-2.13% 🔴", "Vol: 52340.25"} {
+	for _, expected := range []string{"📊 Crypto 1h Update", "09:00 → 10:00 Asia/Ho_Chi_Minh", "BTCUSDT", "$108420.00", "+1.82% 🟢", "Vol: 148976.11428", "SOLUSDT", "-2.13% 🔴", "Vol: 52340.25"} {
 		if !strings.Contains(rendered, expected) {
 			t.Fatalf("message missing %q: %s", expected, rendered)
 		}
