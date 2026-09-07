@@ -47,15 +47,38 @@ func TestPeriodEngineOneHourBoundaries(t *testing.T) {
 func TestPeriodEngineFourHourWindows(t *testing.T) {
 	engine := newTestEngine(t)
 	location := engine.location
-	for _, hour := range []int{10, 14, 18, 22} {
+	for _, hour := range []int{11, 15, 19, 23} {
 		period, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, hour, 0, 0, 0, location), domain.Interval4H)
 		if !ok || period.End.Hour() != hour || period.End.Sub(period.Start) != 4*time.Hour {
 			t.Fatalf("hour %d returned %+v, valid=%v", hour, period, ok)
 		}
 	}
-	for _, hour := range []int{9, 23, 2} {
+	for _, hour := range []int{10, 14, 18, 22, 2} {
 		if _, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, hour, 0, 0, 0, location), domain.Interval4H); ok {
 			t.Fatalf("hour %d should not produce a 4H period", hour)
+		}
+	}
+}
+
+func TestPeriodEngineFourHourWindowsUseUTCAlignedBoundaries(t *testing.T) {
+	engine := newTestEngine(t)
+	location := engine.location
+	tests := []struct {
+		endHour   int
+		startHour int
+	}{
+		{endHour: 11, startHour: 7},
+		{endHour: 15, startHour: 11},
+		{endHour: 19, startHour: 15},
+		{endHour: 23, startHour: 19},
+	}
+	for _, tt := range tests {
+		period, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, tt.endHour, 0, 0, 0, location), domain.Interval4H)
+		if !ok || period.Start.Hour() != tt.startHour || period.End.Hour() != tt.endHour {
+			t.Fatalf("end hour %d returned %+v, valid=%v", tt.endHour, period, ok)
+		}
+		if period.Start.UTC().Hour() != (tt.startHour-7+24)%24 || period.End.UTC().Hour() != (tt.endHour-7+24)%24 {
+			t.Fatalf("period %+v is not UTC aligned", period)
 		}
 	}
 }

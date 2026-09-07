@@ -26,13 +26,13 @@ func (e *PeriodEngine) GetCurrentPeriod(now time.Time, interval domain.Interval)
 	localNow := now.In(e.location)
 	date := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, e.location)
 	minute := localNow.Hour()*60 + localNow.Minute()
-	if minute < 6*60 || minute >= 23*60 {
-		return domain.Period{}, false
-	}
 
 	var start, end time.Time
 	switch interval {
 	case domain.Interval1H:
+		if minute < 6*60 || minute >= 23*60 {
+			return domain.Period{}, false
+		}
 		if localNow.Minute() != 0 {
 			return domain.Period{}, false
 		}
@@ -42,15 +42,20 @@ func (e *PeriodEngine) GetCurrentPeriod(now time.Time, interval domain.Interval)
 			return domain.Period{}, false
 		}
 	case domain.Interval4H:
+		// Binance 4h candles are aligned to UTC. In Asia/Ho_Chi_Minh,
+		// those boundaries are 07:00, 11:00, 15:00, 19:00, and 23:00.
+		if minute < 7*60 || minute > 23*60 {
+			return domain.Period{}, false
+		}
 		switch localNow.Hour() {
-		case 10:
-			start = time.Date(date.Year(), date.Month(), date.Day(), 6, 0, 0, 0, e.location)
-		case 14:
-			start = time.Date(date.Year(), date.Month(), date.Day(), 10, 0, 0, 0, e.location)
-		case 18:
-			start = time.Date(date.Year(), date.Month(), date.Day(), 14, 0, 0, 0, e.location)
-		case 22:
-			start = time.Date(date.Year(), date.Month(), date.Day(), 18, 0, 0, 0, e.location)
+		case 11:
+			start = time.Date(date.Year(), date.Month(), date.Day(), 7, 0, 0, 0, e.location)
+		case 15:
+			start = time.Date(date.Year(), date.Month(), date.Day(), 11, 0, 0, 0, e.location)
+		case 19:
+			start = time.Date(date.Year(), date.Month(), date.Day(), 15, 0, 0, 0, e.location)
+		case 23:
+			start = time.Date(date.Year(), date.Month(), date.Day(), 19, 0, 0, 0, e.location)
 		default:
 			return domain.Period{}, false
 		}

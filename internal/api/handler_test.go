@@ -38,7 +38,7 @@ func TestHealth(t *testing.T) {
 func TestNewServerRegistersRoutes(t *testing.T) {
 	e := NewServer(nil, nil)
 	record := httptest.NewRecorder()
-	request := httptest.NewRequest("GET", "/health", nil)
+	request := httptest.NewRequest("GET", "/api/health", nil)
 	e.ServeHTTP(record, request)
 	if record.Code != 200 {
 		t.Fatalf("status=%d, want 200", record.Code)

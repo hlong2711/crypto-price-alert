@@ -29,7 +29,7 @@ func (s *Scheduler) Start() {
 		func() {
 			_ = s.executor.Execute(context.Background(), time.Now(), domain.Interval1H)
 		})
-	_, _ = s.cron.AddFunc("0 10,14,18,22 * * *",
+	_, _ = s.cron.AddFunc("0 11,15,19,23 * * *",
 		func() {
 			_ = s.executor.Execute(context.Background(), time.Now(), domain.Interval4H)
 		})

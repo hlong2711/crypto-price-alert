@@ -120,9 +120,9 @@ Rules:
 - Default timezone is `Asia/Ho_Chi_Minh`.
 - Active range is `06:00` inclusive through `23:00` exclusive.
 - 1H periods run from `06:00 → 07:00` through `22:00 → 23:00`.
-- 4H periods are `06:00 → 10:00`, `10:00 → 14:00`, `14:00 → 18:00`, and `18:00 → 22:00`.
+- 4H periods are `07:00 → 11:00`, `11:00 → 15:00`, `15:00 → 19:00`, and `19:00 → 23:00`.
+- These periods map to Binance's UTC-aligned 4H candles.
 - `23:00 → 06:00` is inactive.
-- `22:00 → 23:00` is not a valid 4H period.
 
 Acceptance criteria:
 
@@ -215,8 +215,8 @@ Use `robfig/cron` with the configured timezone.
 Triggers:
 
 - 1H at the beginning of each active hour.
-- 4H at `10:00`, `14:00`, `18:00`, and `22:00`.
-- No trigger at `23:00` or during the sleep window.
+- 4H at `11:00`, `15:00`, `19:00`, and `23:00`.
+- The `23:00` 4H trigger closes the final local period; no trigger runs during `23:00 → 06:00`.
 
 Execution flow:
 
@@ -234,7 +234,7 @@ Do not implement startup catch-up for missed periods in the MVP.
 Acceptance criteria:
 
 - A 1H trigger at `10:00` processes `09:00 → 10:00`.
-- A 4H trigger at `10:00` processes `06:00 → 10:00`.
+- A 4H trigger at `11:00` processes `07:00 → 11:00`.
 - No notification is sent during `23:00 → 06:00`.
 - Repeated scheduler invocation cannot duplicate a sent job.
 - One symbol failure does not discard other symbols.
@@ -260,7 +260,7 @@ Acceptance criteria:
 - Handler panics are recovered and logged.
 - Health check works inside Docker.
 
-## Step 12 — Docker deployment — IN PROGRESS
+## Step 12 — Docker deployment — DONE
 
 - Create a multi-stage Dockerfile.
 - Create Docker Compose services for `crypto-alert` and `postgres`.
@@ -279,7 +279,7 @@ Acceptance criteria:
 - Restarting the application preserves job records.
 - No secret is hard-coded in Dockerfile or Compose configuration.
 
-## Step 13 — Full verification
+## Step 13 — Full verification — IN PROGRESS
 
 Add and run:
 
