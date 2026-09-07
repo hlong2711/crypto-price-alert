@@ -11,7 +11,7 @@ import (
 
 func sendWithRetry(ctx context.Context, client *http.Client, method, url string, payload []byte, maxAttempts int, backoff time.Duration) error {
 	var lastErr error
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for attempt := range maxAttempts {
 		req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(payload))
 		if err != nil {
 			return err

@@ -114,16 +114,13 @@ func (e *Executor) Execute(ctx context.Context, now time.Time, interval domain.I
 	}
 	var wg sync.WaitGroup
 	for _, item := range items {
-		item := item
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if sendErr != nil {
 				_ = e.repository.MarkFailed(ctx, item.job.ID, sendErr.Error())
 			} else {
 				_ = e.repository.MarkSent(ctx, item.job.ID, time.Now().UTC())
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	return sendErr

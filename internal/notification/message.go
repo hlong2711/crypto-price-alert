@@ -26,7 +26,10 @@ func BuildMessage(period domain.Period, results []PriceResult, location *time.Lo
 		return domain.Message{}, fmt.Errorf("message results must not be empty")
 	}
 
-	sort.SliceStable(results, func(i, j int) bool { return results[i].Change.Symbol < results[j].Change.Symbol })
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].Change.Symbol < results[j].Change.Symbol
+	})
+
 	lines := make([]string, 0, len(results))
 	for _, result := range results {
 		if result.Change.Symbol == "" {
@@ -40,11 +43,23 @@ func BuildMessage(period domain.Period, results []PriceResult, location *time.Lo
 		if result.Change.ChangePct < 0 {
 			icon = "🔴"
 		}
-		lines = append(lines, fmt.Sprintf("%-8s $%s %+.2f%% %s Vol: %s", result.Change.Symbol, formatPrice(result.Change.Close), result.Change.ChangePct, icon, formatVolume(result.Change.Volume)))
+		lines = append(lines, fmt.Sprintf(
+			"%-8s $%s %+.2f%% %s Vol: %s",
+			result.Change.Symbol,
+			formatPrice(result.Change.Close),
+			result.Change.ChangePct,
+			icon,
+			formatVolume(result.Change.Volume),
+		))
 	}
 
 	title := fmt.Sprintf("📊 Crypto %s Update", period.Interval)
-	periodText := fmt.Sprintf("%s → %s %s", period.Start.In(location).Format("15:04"), period.End.In(location).Format("15:04"), location.String())
+	periodText := fmt.Sprintf(
+		"%s → %s %s",
+		period.Start.In(location).Format("15:04"),
+		period.End.In(location).Format("15:04"),
+		location.String(),
+	)
 	return domain.Message{
 		Title:  title,
 		Period: period,

@@ -52,7 +52,14 @@ func (p *BinanceProvider) GetKline(ctx context.Context, symbol string, interval 
 		return domain.Candle{}, ctx.Err()
 	}
 
-	url := fmt.Sprintf("%s/api/v3/klines?symbol=%s&interval=%s&startTime=%d&endTime=%d&limit=1", p.baseURL, symbol, interval, start.UnixMilli(), end.UnixMilli())
+	url := fmt.Sprintf(
+		"%s/api/v3/klines?symbol=%s&interval=%s&startTime=%d&endTime=%d&limit=1",
+		p.baseURL,
+		symbol,
+		interval,
+		start.UnixMilli(),
+		end.UnixMilli(),
+	)
 	var lastErr error
 	for attempt := 0; attempt < p.maxAttempts; attempt++ {
 		candle, retry, err := p.request(ctx, url, symbol, start, end)
