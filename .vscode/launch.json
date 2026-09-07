@@ -10,7 +10,8 @@
       "request": "launch",
       "mode": "debug",
       "program": "${workspaceFolder}/cmd/server",
-      "cwd": "${workspaceFolder}"
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env"
     },
     {
       "name": "Connect to server",
