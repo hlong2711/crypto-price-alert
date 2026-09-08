@@ -6,6 +6,863 @@ Planning only. No implementation changes are included in this document.
 
 The existing working-tree change to `configs/config.yaml` must remain untouched.
 
+## Gated implementation protocol
+
+Implementation must proceed one phase at a time.
+
+For every phase:
+
+1. Confirm the phase scope before editing code.
+2. Implement only that phase.
+3. Run the phase's required tests and verification commands.
+4. Report changed files, test results, and any design decisions.
+5. Stop and wait for explicit user approval.
+6. Begin the next phase only after the previous phase passes and approval is received.
+
+No phase may hide failing tests, weaken existing tests, or modify unrelated user changes. A phase that fails testing must be fixed before approval is requested again.
+
+The first implementation turn should begin with Phase 0 only. The plan itself is not approval to implement all phases.
+
+## Detailed code blueprint
+
+### Phase 0 — Baseline and implementation scaffolding
+
+#### Goal
+
+Establish a clean, measurable baseline before changing behavior.
+
+#### Files to inspect or update
+
+```text
+README.md
+docs/plans/crypto-price-alert-mvp-implementation-plan.md
+docs/plans/chat-configurable-scheduler-implementation-plan.md
+internal/config/config.go
+internal/database/database.go
+internal/scheduler/scheduler.go
+internal/notification/*.go
+cmd/server/main.go
+```
+
+#### Ordered steps
+
+1. Inspect the current working tree and preserve unrelated modifications.
+2. Run the current test suite:
+
+   ```text
+   go test ./...
+   go vet ./...
+   go build ./...
+   ```
+
+3. Record the current behavior of the fixed scheduler, global symbols, and configured notification destinations.
+4. Define the feature flag and compatibility behavior before adding runtime configuration.
+5. Add only empty package boundaries or interfaces if needed for later phases; do not change scheduler behavior in this phase.
+6. Document any baseline failure as pre-existing before implementation begins.
+
+#### Phase 0 tests and acceptance
+
+- Existing tests pass, or known pre-existing failures are documented.
+- The application still builds.
+- No existing notification or scheduler behavior changes.
+- The dirty `configs/config.yaml` change is preserved.
+- The feature can be disabled without changing current runtime behavior.
+
+#### Gate
+
+Stop after baseline verification. Proceed only after the user approves the Phase 0 results.
+
+---
+
+### Phase 1 — Domain types, database models, and migrations
+
+#### Goal
+
+Introduce persistent alert targets and per-target configuration without connecting them to the scheduler yet.
+
+#### Files to add or modify
+
+```text
+internal/domain/types.go
+internal/domain/chat.go
+internal/database/model.go
+internal/database/database.go
+internal/repository/repository.go
+internal/repository/postgres.go
+internal/repository/target_repository.go
+internal/repository/config_repository.go
+internal/repository/event_repository.go
+internal/database/*_test.go
+internal/repository/*_test.go
+```
+
+#### Domain types
+
+Add validated types similar to:
+
+```go
+type ChatProvider string
+
+const (
+    ChatProviderTelegram ChatProvider = "telegram"
+    ChatProviderSlack    ChatProvider = "slack"
+)
+
+type AlertTarget struct {
+    ID              string
+    Provider        ChatProvider
+    TenantID        string
+    ExternalChatID  string
+    DisplayName     string
+    CreatorUserID   string
+    Enabled         bool
+    CreatedAt       time.Time
+    UpdatedAt       time.Time
+}
+
+type AlertConfig struct {
+    TargetID       string
+    Enabled        bool
+    Symbols        []string
+    Intervals      []Interval
+    Version        int64
+    UpdatedBy      string
+    UpdatedAt      time.Time
+}
+
+type InboundEvent struct {
+    Provider        ChatProvider
+    ExternalEventID string
+    ReceivedAt      time.Time
+}
+```
+
+Validation must reject empty target identity, unsupported provider, empty creator identity, invalid intervals, empty symbols, and invalid version metadata.
+
+#### Database models
+
+Add GORM models for:
+
+- `alert_targets`;
+- `alert_configs`;
+- `alert_config_symbols`;
+- `alert_config_intervals`;
+- `inbound_events`.
+
+Extend `notification_jobs` with `target_id` and replace its uniqueness key with `(target_id, symbol, interval, period_start)`.
+
+Do not make existing jobs impossible to migrate. The migration must define how old rows receive a legacy/default target ID.
+
+#### Repository interfaces
+
+Add repository methods for:
+
+- finding a target by provider, tenant, and external chat ID;
+- creating a target idempotently;
+- loading an alert configuration;
+- replacing symbols and intervals transactionally;
+- enabling and pausing a target;
+- listing enabled targets with their configurations;
+- claiming an inbound event idempotently;
+- marking an inbound event processed or failed.
+
+The configuration replacement operation must update the parent version and child rows in one database transaction.
+
+#### Tests
+
+Add tests for:
+
+- domain validation;
+- target uniqueness;
+- configuration child-row uniqueness;
+- transaction rollback on invalid configuration;
+- optimistic version conflict;
+- inbound event uniqueness;
+- target-specific notification job uniqueness;
+- migration behavior for existing notification jobs.
+
+#### Acceptance criteria
+
+- `go test ./...` passes.
+- `go vet ./...` passes.
+- `go build ./...` passes.
+- GORM migration creates all required tables and constraints.
+- Repeated target creation returns the same target.
+- Invalid configuration cannot partially persist.
+- Two configurations for different targets can use the same symbol, interval, and period.
+- Existing notification jobs remain readable after migration.
+- No scheduler or notifier behavior changes yet.
+
+#### Gate
+
+Stop and report the schema, migration behavior, test output, and compatibility risks. Proceed only after user approval.
+
+---
+
+### Phase 2 — Configuration service and validation
+
+#### Goal
+
+Create the application service that owns configuration changes independently of Telegram and Slack.
+
+#### Files to add or modify
+
+```text
+internal/config/config.go
+internal/config/config_test.go
+internal/configuration/service.go
+internal/configuration/validator.go
+internal/configuration/service_test.go
+internal/domain/chat.go
+cmd/server/main.go
+```
+
+#### Configuration additions
+
+Add validated configuration for:
+
+```yaml
+chat:
+  enabled: false
+  max_symbols_per_target: 20
+  max_targets: 100
+  webhook_base_url: ""
+  telegram:
+    enabled: false
+    webhook_secret: "${TELEGRAM_WEBHOOK_SECRET}"
+  slack:
+    enabled: false
+    signing_secret: "${SLACK_SIGNING_SECRET}"
+    bot_token: "${SLACK_BOT_TOKEN}"
+```
+
+The initial default must be disabled unless explicitly enabled. Existing static notification configuration must continue to work while this feature is disabled.
+
+#### Service operations
+
+Implement application-level operations:
+
+```text
+GetTarget
+GetConfig
+ReplaceConfig
+EnableTarget
+PauseTarget
+ListAllowedSymbols
+ListAllowedIntervals
+```
+
+`ReplaceConfig` must:
+
+1. verify that the target exists;
+2. normalize symbols to uppercase;
+3. validate symbols against `market.symbols`;
+4. validate intervals against configured intervals and domain intervals;
+5. enforce configured limits;
+6. verify the expected version;
+7. persist the complete configuration atomically;
+8. return the new version.
+
+Authorization is not implemented inside this service yet. The service receives an already-authorized actor or an authorization result from the chat layer.
+
+#### Tests
+
+Add tests for:
+
+- valid configuration replacement;
+- lowercase symbol normalization;
+- unknown symbol rejection;
+- unsupported interval rejection;
+- duplicate handling;
+- empty symbol and interval rejection;
+- maximum symbol limit;
+- pause and resume;
+- version conflict;
+- transaction failure;
+- feature-disabled behavior;
+- legacy static configuration compatibility.
+
+#### Acceptance criteria
+
+- Configuration rules are enforced in one service, not duplicated in chat adapters.
+- Invalid updates leave the previous configuration unchanged.
+- Successful updates increment the version exactly once.
+- The service is testable with repository fakes.
+- Chat remains disabled by default.
+- Existing API and scheduler tests continue to pass.
+
+#### Gate
+
+Stop after configuration-service tests pass. Report the public service interfaces and validation rules. Proceed only after user approval.
+
+---
+
+### Phase 3 — Shared command model, sessions, and authorization
+
+#### Goal
+
+Create platform-independent command processing and secure interactive configuration sessions.
+
+#### Files to add
+
+```text
+internal/chat/command.go
+internal/chat/parser.go
+internal/chat/session.go
+internal/chat/authorization.go
+internal/chat/service.go
+internal/chat/*_test.go
+```
+
+#### Command model
+
+Define normalized commands:
+
+```go
+type CommandAction string
+
+const (
+    ActionHelp      CommandAction = "help"
+    ActionConfigure CommandAction = "configure"
+    ActionShow      CommandAction = "show"
+    ActionEnable    CommandAction = "enable"
+    ActionPause     CommandAction = "pause"
+    ActionTest      CommandAction = "test"
+)
+
+type Command struct {
+    Target       domain.AlertTarget
+    ActorUserID  string
+    Action       CommandAction
+    Arguments    []string
+    EventID      string
+}
+```
+
+The parser must accept platform-specific input but return the same command model.
+
+#### Authorization model
+
+Define an adapter-independent authorization request:
+
+```go
+type AuthorizationRequest struct {
+    Target      domain.AlertTarget
+    ActorUserID string
+    Action      CommandAction
+}
+```
+
+Mutating actions require a positive creator check. Read-only actions may be available to all chat members according to product policy.
+
+Every interaction must be authorized again when it is submitted. Never trust a button payload merely because it was generated by the application.
+
+#### Interactive sessions
+
+Add a short-lived configuration session containing:
+
+```text
+session_id
+target_id
+actor_user_id
+base_config_version
+selected_symbols
+selected_intervals
+expires_at
+```
+
+Sessions may be stored in PostgreSQL or an in-memory store for the first single-instance implementation. PostgreSQL is preferred if multiple instances are expected soon.
+
+The final save must reject expired sessions, wrong actors, wrong targets, and stale configuration versions.
+
+#### Tests
+
+Add tests for:
+
+- every supported command;
+- unknown command;
+- malformed arguments;
+- actor identity propagation;
+- creator authorization success and failure;
+- read-only versus mutating action policy;
+- session ownership;
+- session expiration;
+- stale version rejection;
+- replayed interaction rejection.
+
+#### Acceptance criteria
+
+- Telegram and Slack adapters can share the same parser and service.
+- No mutation occurs without a creator authorization result.
+- An interaction cannot be reused by another user.
+- A stale configuration session cannot overwrite a newer configuration.
+- Command responses do not contain credentials or internal stack traces.
+
+#### Gate
+
+Stop after command, authorization, and session tests pass. Proceed only after user approval.
+
+---
+
+### Phase 4 — Telegram adapter
+
+#### Goal
+
+Receive Telegram commands and provide native command discovery plus inline configuration controls.
+
+#### Files to add or modify
+
+```text
+internal/chat/telegram/types.go
+internal/chat/telegram/client.go
+internal/chat/telegram/webhook.go
+internal/chat/telegram/commands.go
+internal/chat/telegram/telegram_test.go
+internal/api/routes.go
+cmd/server/main.go
+```
+
+#### Ordered steps
+
+1. Define only the Telegram payload types needed for messages, callback queries, chats, users, and administrators.
+2. Implement the Telegram API client with timeout, retry classification, and response validation.
+3. Implement webhook secret-header verification.
+4. Implement update decoding and event ID extraction.
+5. Implement `getChatAdministrators` lookup.
+6. Implement creator comparison using numeric Telegram user IDs.
+7. Register native top-level commands using `setMyCommands`.
+8. Implement `/crypto-alert` parsing and shared command dispatch.
+9. Implement inline-keyboard rendering for symbols, intervals, save, and cancel.
+10. Implement callback payload validation and session lookup.
+11. Send responses through the Telegram chat ID associated with the target.
+12. Claim inbound events before enqueueing them.
+13. Return HTTP 200 quickly after authentication and event claim.
+
+#### Telegram command list
+
+Register:
+
+```text
+help       Show available commands
+configure  Configure symbols and intervals
+show       Show current configuration
+enable     Enable alerts
+pause      Pause alerts
+test       Send a test alert
+```
+
+The command menu is for discoverability only. Creator authorization must run for every mutation and callback.
+
+#### Tests
+
+- valid webhook secret;
+- invalid webhook secret;
+- malformed update;
+- duplicate update ID;
+- message command parsing;
+- callback query parsing;
+- creator returned by `getChatAdministrators`;
+- non-creator rejection;
+- Telegram API timeout and retry;
+- Telegram API non-retryable error;
+- command registration payload;
+- inline keyboard payload;
+- expired session;
+- successful save;
+- failed save leaves configuration unchanged.
+
+#### Acceptance criteria
+
+- A Telegram creator can open and complete the configuration flow.
+- A Telegram non-creator cannot mutate configuration through text or buttons.
+- The Telegram webhook rejects unauthenticated requests.
+- Duplicate updates are processed once.
+- The bot command menu exposes the supported commands.
+- Symbols and intervals are selected from allowed values.
+- Existing Telegram notifications remain functional when chat configuration is disabled.
+
+#### Gate
+
+Stop after Telegram adapter tests pass. Perform no Slack or scheduler work until user approval is received.
+
+---
+
+### Phase 5 — Slack adapter
+
+#### Goal
+
+Receive Slack commands and provide slash-command autocomplete plus Block Kit configuration controls.
+
+#### Files to add or modify
+
+```text
+internal/chat/slack/types.go
+internal/chat/slack/client.go
+internal/chat/slack/signature.go
+internal/chat/slack/webhook.go
+internal/chat/slack/blocks.go
+internal/chat/slack/slack_test.go
+internal/api/routes.go
+cmd/server/main.go
+```
+
+#### Ordered steps
+
+1. Define URL-encoded slash-command payload types and JSON interaction payload types.
+2. Preserve the raw request body before parsing.
+3. Verify the timestamp and HMAC signature.
+4. Reject requests outside the replay window.
+5. Validate the expected Slack app ID/team context.
+6. Implement the Slack Web API client with timeout and response validation.
+7. Implement channel creator lookup.
+8. Implement slash-command acknowledgment within Slack's deadline.
+9. Dispatch the normalized command asynchronously.
+10. Render ephemeral help and status responses.
+11. Render Block Kit symbol and interval controls.
+12. Validate callback action IDs, target channel, actor, and session ID.
+13. Re-check channel creator on every mutation.
+14. Save through the shared configuration service.
+15. Respond through the interaction response URL or Slack Web API.
+
+#### Slack command registration
+
+Register one distinctive slash command:
+
+```text
+/crypto-alert
+```
+
+Usage hint:
+
+```text
+[help|configure|show|enable|pause|test]
+```
+
+The handler must respond to `/crypto-alert help` and unknown input with the full command list.
+
+#### Tests
+
+- valid Slack signature;
+- invalid signature;
+- stale timestamp;
+- malformed form payload;
+- wrong app ID or team ID;
+- command acknowledgment;
+- command parsing;
+- channel creator success;
+- non-creator rejection;
+- Block Kit action parsing;
+- wrong actor or channel in callback;
+- expired session;
+- stale config version;
+- Slack API retryable and non-retryable errors;
+- ephemeral response rendering;
+- duplicate event handling.
+
+#### Acceptance criteria
+
+- A Slack channel creator can configure symbols and intervals from the slash-command UI.
+- A Slack non-creator cannot mutate configuration.
+- Slack requests are authenticated with the signing secret.
+- Slash commands are acknowledged within the required response window.
+- Symbol and interval controls use allowed values only.
+- Interactive responses are scoped to the initiating user where appropriate.
+- Existing Slack notifications remain functional when chat configuration is disabled.
+
+#### Gate
+
+Stop after Slack adapter tests pass. Proceed to scheduler integration only after explicit user approval.
+
+---
+
+### Phase 6 — Target-aware notification delivery
+
+#### Goal
+
+Make notification delivery target-aware while preserving current notifier behavior in compatibility mode.
+
+#### Files to modify
+
+```text
+internal/domain/types.go
+internal/notification/notifier.go
+internal/notification/telegram.go
+internal/notification/slack.go
+internal/notification/dryrun.go
+internal/notification/notifiers_test.go
+internal/service/alert.go
+internal/service/alert_test.go
+internal/scheduler/executor.go
+internal/repository/repository.go
+internal/repository/postgres.go
+```
+
+#### Ordered steps
+
+1. Add an alert-target delivery abstraction.
+2. Keep current constructors and compatibility behavior where possible.
+3. Add Telegram target chat ID resolution.
+4. Add Slack target channel posting through the bot token.
+5. Keep the existing incoming webhook path only for legacy mode.
+6. Ensure each target receives only its own message.
+7. Preserve partial symbol-failure behavior.
+8. Return per-target delivery results.
+9. Mark target-specific jobs after the delivery policy completes.
+
+#### Tests
+
+- Telegram sends to the requested target chat;
+- Slack sends to the requested target channel;
+- target A cannot receive target B's message;
+- one target failure does not prevent another target;
+- dry-run target output;
+- retry behavior;
+- job status updates;
+- compatibility-mode notifier behavior.
+
+#### Acceptance criteria
+
+- Notification delivery has no global mutable destination.
+- Each message is routed to the correct target.
+- Job uniqueness includes target ID.
+- Existing single-target tests and behavior still pass.
+
+#### Gate
+
+Stop after target-aware notification tests pass. Proceed only after approval.
+
+---
+
+### Phase 7 — Dynamic scheduler integration
+
+#### Goal
+
+Run different alert configurations for different targets without restarting the service.
+
+#### Files to modify or add
+
+```text
+internal/scheduler/scheduler.go
+internal/scheduler/coordinator.go
+internal/scheduler/executor.go
+internal/scheduler/target_executor.go
+internal/scheduler/*_test.go
+cmd/server/main.go
+```
+
+#### Ordered steps
+
+1. Keep the period engine as the source of truth for 1h and 4h periods.
+2. Replace fixed global symbol execution with enabled-target loading.
+3. Add a coordinator tick every minute.
+4. Resolve due periods using the configured application timezone.
+5. Create one target execution task per target and interval.
+6. Load the target configuration immediately before execution.
+7. Create target-specific jobs idempotently.
+8. Skip already-sent target jobs.
+9. Fetch all configured symbols for the target.
+10. Build one aggregated message per target and period.
+11. Send through the target-aware notifier.
+12. Mark each target job sent or failed.
+13. Preserve graceful scheduler shutdown.
+14. Add a single-instance mutex around in-process target execution if required.
+15. Do not add multi-replica support until the single-instance behavior is verified.
+
+#### Tests
+
+- one target and one interval;
+- one target and both intervals;
+- multiple targets with different symbols;
+- multiple targets with different intervals;
+- paused target skipped;
+- target added without restart;
+- configuration changed before the next period;
+- duplicate coordinator ticks;
+- provider failure for one symbol;
+- notifier failure for one target;
+- no execution during the inactive window;
+- exact 1h and 4h period boundaries;
+- graceful scheduler stop.
+
+#### Acceptance criteria
+
+- Runtime configuration takes effect without restart.
+- Different chats receive different symbol sets and intervals.
+- Paused targets produce no notifications.
+- Duplicate ticks cannot duplicate sent jobs.
+- Existing period and timezone semantics remain unchanged.
+- One target's failure does not stop other targets.
+- Scheduler tests pass deterministically without real waiting.
+
+#### Gate
+
+Stop after scheduler tests pass. Report concurrency and consistency behavior. Proceed only after explicit user approval.
+
+---
+
+### Phase 8 — HTTP wiring, startup, and deployment
+
+#### Goal
+
+Wire the feature into the application lifecycle and make webhook deployment configurable.
+
+#### Files to modify
+
+```text
+internal/api/routes.go
+internal/api/handler.go
+internal/api/handler_test.go
+cmd/server/main.go
+configs/config.example.yaml
+.env.example
+docker-compose.yml
+README.md
+```
+
+#### Ordered steps
+
+1. Add webhook routes to Echo.
+2. Inject chat services and platform clients through constructors.
+3. Validate chat configuration at startup.
+4. Initialize repositories before chat services.
+5. Initialize chat adapters before webhook routes.
+6. Start the scheduler only after database migration and service initialization succeed.
+7. Preserve health-check behavior.
+8. Add graceful shutdown for webhook workers and scheduler.
+9. Document HTTPS requirements and platform setup.
+10. Add environment variables without committing secrets.
+11. Update Docker Compose health and port documentation if needed.
+
+#### Tests
+
+- route registration;
+- health endpoint;
+- startup with chat disabled;
+- startup with Telegram enabled;
+- startup with Slack enabled;
+- invalid chat configuration;
+- graceful shutdown;
+- webhook HTTP status behavior;
+- Docker Compose configuration validation.
+
+#### Acceptance criteria
+
+- Chat-disabled deployments behave as before.
+- Chat-enabled deployments start only with valid secrets and configuration.
+- Webhook routes are reachable and authenticated.
+- Health checks do not expose credentials.
+- `docker compose config` passes.
+
+#### Gate
+
+Stop after application wiring and deployment tests pass. Proceed only after approval.
+
+---
+
+### Phase 9 — Legacy migration and rollout
+
+#### Goal
+
+Migrate existing static notification configuration safely and enable the feature gradually.
+
+#### Files to modify or add
+
+```text
+internal/database/database.go
+internal/repository/migration.go
+cmd/server/main.go
+configs/config.example.yaml
+README.md
+docs/plans/chat-configurable-scheduler-implementation-plan.md
+```
+
+#### Ordered steps
+
+1. Define the legacy target identity deterministically.
+2. Create a legacy target for the existing Telegram chat if configured.
+3. Define how Slack webhook-only configuration maps to a target, or require explicit Slack app setup.
+4. Seed the legacy target's symbols and intervals from YAML.
+5. Ensure the migration is idempotent.
+6. Run the service with chat configuration disabled and verify unchanged behavior.
+7. Enable chat configuration in dry-run mode.
+8. Verify creator authorization in real test groups/channels.
+9. Enable real chat-driven configuration.
+10. Monitor webhook errors, authorization failures, scheduler failures, and notification failures.
+11. Remove legacy behavior only in a separately approved cleanup phase.
+
+#### Tests
+
+- clean database migration;
+- migration with existing jobs;
+- repeated migration;
+- legacy Telegram target seeding;
+- incomplete Slack legacy configuration;
+- chat-disabled compatibility;
+- dry-run delivery;
+- rollback or restart during migration.
+
+#### Acceptance criteria
+
+- Existing jobs and destinations are not duplicated.
+- Restarting the service does not create duplicate targets or configuration rows.
+- Chat can be enabled without losing existing schedules.
+- Rollback to chat-disabled mode remains possible.
+- Migration behavior is documented and observable.
+
+#### Gate
+
+Stop after migration and rollout verification. Proceed only after user approval to remove or deprecate compatibility behavior.
+
+---
+
+### Phase 10 — Full verification and handoff
+
+#### Goal
+
+Verify the complete feature and produce the final implementation report.
+
+#### Required commands
+
+```text
+gofmt -w <changed Go files>
+go test ./...
+go vet ./...
+go build ./...
+docker compose config
+```
+
+Run integration and end-to-end tests using fake Binance, Telegram, Slack, and PostgreSQL dependencies where applicable.
+
+#### Required end-to-end scenarios
+
+```text
+Telegram creator → configure symbols → configure intervals → scheduler tick → Telegram alert
+Telegram member → configure symbols → rejected
+Slack channel creator → configure symbols → configure intervals → Slack alert
+Slack non-creator → configure intervals → rejected
+Invalid symbol → rejected without database change
+Duplicate webhook event → applied once
+Duplicate scheduler tick → one notification
+Paused target → no notification
+One target failure → other target continues
+Application restart → configuration survives
+```
+
+#### Final acceptance criteria
+
+- All tests pass.
+- No known regression exists in the original scheduler behavior.
+- No secrets are logged or committed.
+- Database migrations are repeatable.
+- Authorization is enforced for every mutating path.
+- Interactive sessions cannot be replayed or transferred between users.
+- Runtime configuration is isolated per chat.
+- Documentation includes setup, commands, permissions, webhook configuration, and rollback.
+
+#### Final gate
+
+Stop and provide the complete change summary, test evidence, migration notes, and operational risks. Do not perform additional cleanup or refactoring without separate approval.
+
 ## Objective
 
 Allow users to configure scheduled crypto alerts from Telegram or Slack chat, including:
