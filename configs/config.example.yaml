@@ -38,6 +38,7 @@ chat:
   webhook_base_url: "https://alerts.example.com"
   telegram:
     enabled: false
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
     webhook_secret: "${TELEGRAM_WEBHOOK_SECRET}"
   slack:
     enabled: false

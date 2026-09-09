@@ -48,7 +48,7 @@ func TestConfigValidateRejectsInvalidValues(t *testing.T) {
 
 func TestConfigValidateChatSettings(t *testing.T) {
 	cfg := validConfig()
-	cfg.Chat = ChatConfig{Enabled: true, MaxSymbolsPerTarget: 20, MaxTargets: 10, WebhookBaseURL: "https://alerts.example.com", Telegram: ChatTelegramConfig{Enabled: true, WebhookSecret: "secret"}}
+	cfg.Chat = ChatConfig{Enabled: true, MaxSymbolsPerTarget: 20, MaxTargets: 10, WebhookBaseURL: "https://alerts.example.com", Telegram: ChatTelegramConfig{Enabled: true, BotToken: "token", WebhookSecret: "secret"}}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected valid chat config, got %v", err)
 	}

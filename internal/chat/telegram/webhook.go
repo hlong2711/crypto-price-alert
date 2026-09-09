@@ -28,11 +28,26 @@ type Adapter struct {
 	allowedIntervals []domain.Interval
 }
 
+// RegisterCommands publishes the bot command menu through Telegram.
+func (a *Adapter) RegisterCommands(ctx context.Context) error {
+	return a.client.RegisterDefaultCommands(ctx)
+}
+
 func NewAdapter(client *APIClient, targets TargetRepository, events EventRepository, commands CommandService, sessions chat.SessionStore, webhookSecret, tenantID string, symbols []string, intervals []domain.Interval) (*Adapter, error) {
 	if client == nil || targets == nil || events == nil || commands == nil || sessions == nil || strings.TrimSpace(webhookSecret) == "" || strings.TrimSpace(tenantID) == "" {
 		return nil, fmt.Errorf("invalid Telegram adapter settings")
 	}
-	return &Adapter{client: client, targets: targets, events: events, commands: commands, sessions: sessions, webhookSecret: webhookSecret, tenantID: tenantID, allowedSymbols: append([]string(nil), symbols...), allowedIntervals: append([]domain.Interval(nil), intervals...)}, nil
+	return &Adapter{
+		client:           client,
+		targets:          targets,
+		events:           events,
+		commands:         commands,
+		sessions:         sessions,
+		webhookSecret:    webhookSecret,
+		tenantID:         tenantID,
+		allowedSymbols:   append([]string(nil), symbols...),
+		allowedIntervals: append([]domain.Interval(nil), intervals...),
+	}, nil
 }
 
 // Webhook handles authenticated Telegram updates and acknowledges duplicates.
@@ -49,7 +64,13 @@ func (a *Adapter) Webhook(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 	externalID := fmt.Sprintf("%d", update.UpdateID)
-	event := domain.InboundEvent{ID: uuid.NewString(), Provider: domain.ChatProviderTelegram, ExternalEventID: externalID, ReceivedAt: time.Now().UTC(), Status: "received"}
+	event := domain.InboundEvent{
+		ID:              uuid.NewString(),
+		Provider:        domain.ChatProviderTelegram,
+		ExternalEventID: externalID,
+		ReceivedAt:      time.Now().UTC(),
+		Status:          "received",
+	}
 	claimed, err := a.events.ClaimInboundEvent(c.Request().Context(), event)
 	if err != nil {
 		return c.NoContent(http.StatusInternalServerError)
@@ -61,7 +82,9 @@ func (a *Adapter) Webhook(c echo.Context) error {
 		_ = a.events.MarkInboundEventFailed(c.Request().Context(), domain.ChatProviderTelegram, externalID, err.Error())
 		return c.NoContent(http.StatusOK)
 	}
+
 	_ = a.events.MarkInboundEventProcessed(c.Request().Context(), domain.ChatProviderTelegram, externalID, time.Now().UTC())
+
 	return c.NoContent(http.StatusOK)
 }
 
@@ -75,10 +98,12 @@ func (a *Adapter) process(c echo.Context, update Update) error {
 		if err != nil {
 			return err
 		}
+
 		action, args, err := chat.ParseCommand(update.Message.Text)
 		if err != nil {
 			return a.client.SendMessage(ctx, update.Message.Chat.ID, "Unknown command. Use /crypto-alert help.", nil)
 		}
+
 		response, err := a.commands.Handle(ctx,
 			chat.Command{
 				Target:      target,
@@ -90,12 +115,14 @@ func (a *Adapter) process(c echo.Context, update Update) error {
 		if err != nil {
 			return a.client.SendMessage(ctx, update.Message.Chat.ID, safeError(err), nil)
 		}
+
 		var keyboard *InlineKeyboardMarkup
 		if action == chat.ActionConfigure {
 			keyboard = a.configurationKeyboard(response)
 		}
 		return a.client.SendMessage(ctx, update.Message.Chat.ID, response, keyboard)
 	}
+
 	if update.CallbackQuery != nil {
 		return a.processCallback(ctx, update.CallbackQuery)
 	}
@@ -106,14 +133,17 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 	if callback.Message == nil {
 		return fmt.Errorf("callback has no message")
 	}
+
 	target, err := a.targets.GetTarget(ctx, domain.ChatProviderTelegram, a.tenantID, chatIDString(callback.Message.Chat.ID))
 	if err != nil {
 		return err
 	}
+
 	admins, err := a.client.GetChatAdministrators(ctx, callback.Message.Chat.ID)
 	if err != nil {
 		return err
 	}
+
 	creator := ""
 	for _, admin := range admins {
 		if admin.Status == "creator" {
@@ -121,6 +151,7 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 			break
 		}
 	}
+
 	if creator == "" || creator != userIDString(callback.From.ID) {
 		return fmt.Errorf("only the chat creator can use this configuration control")
 	}
@@ -128,7 +159,13 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 	if err != nil {
 		return err
 	}
-	command := chat.Command{Target: target, ActorUserID: userIDString(callback.From.ID), Action: chat.ActionSave, Arguments: []string{sessionID}}
+
+	command := chat.Command{
+		Target:      target,
+		ActorUserID: userIDString(callback.From.ID),
+		Action:      chat.ActionSave,
+		Arguments:   []string{sessionID},
+	}
 	session, err := a.sessions.Get(ctx, sessionID)
 	if err != nil || session.TargetID != target.ID {
 		return fmt.Errorf("invalid configuration session")
@@ -139,21 +176,25 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 		if err := a.commands.UpdateSession(ctx, command, session.SelectedSymbols, session.SelectedIntervals); err != nil {
 			return err
 		}
+
 	case strings.HasPrefix(action, "interval:"):
 		value := domain.Interval(strings.TrimPrefix(action, "interval:"))
 		session.SelectedIntervals = toggleInterval(session.SelectedIntervals, value)
 		if err := a.commands.UpdateSession(ctx, command, session.SelectedSymbols, session.SelectedIntervals); err != nil {
 			return err
 		}
+
 	case action == "save":
 		if _, err := a.commands.Handle(ctx, command); err != nil {
 			return err
 		}
+
 	case action == "cancel":
 		command.Action = chat.ActionCancel
 		if _, err := a.commands.Handle(ctx, command); err != nil {
 			return err
 		}
+
 	default:
 		return fmt.Errorf("unsupported callback action")
 	}
@@ -166,6 +207,7 @@ func (a *Adapter) targetForChat(ctx context.Context, telegramChat Chat) (domain.
 	if err != nil {
 		return domain.AlertTarget{}, err
 	}
+
 	var creator *ChatMember
 	for i := range admins {
 		if admins[i].Status == "creator" {
@@ -176,6 +218,7 @@ func (a *Adapter) targetForChat(ctx context.Context, telegramChat Chat) (domain.
 	if creator == nil {
 		return domain.AlertTarget{}, fmt.Errorf("chat creator not found")
 	}
+
 	return a.targets.FindOrCreateTarget(ctx, domain.AlertTarget{
 		ID:             uuid.NewString(),
 		Provider:       domain.ChatProviderTelegram,
@@ -189,6 +232,7 @@ func (a *Adapter) targetForChat(ctx context.Context, telegramChat Chat) (domain.
 
 func (a *Adapter) configurationKeyboard(sessionID string) *InlineKeyboardMarkup {
 	keyboard := &InlineKeyboardMarkup{}
+
 	for _, symbol := range a.allowedSymbols {
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
 			Text:         symbol,

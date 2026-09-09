@@ -84,8 +84,10 @@ func newAdapter(t *testing.T, httpClient *http.Client, events *fakeEvents, comma
 
 func TestAPIClientAndCommandRegistration(t *testing.T) {
 	var methods []string
+	var commandPayload []byte
 	client, err := NewAPIClient("token", "http://telegram.test", &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		methods = append(methods, r.URL.Path)
+		commandPayload, _ = io.ReadAll(r.Body)
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Header:     make(http.Header),
@@ -100,6 +102,15 @@ func TestAPIClientAndCommandRegistration(t *testing.T) {
 	}
 	if len(methods) != 1 || methods[0] != "/bottoken/setMyCommands" {
 		t.Fatalf("unexpected API call: %v", methods)
+	}
+	var payload struct {
+		Commands []BotCommand `json:"commands"`
+	}
+	if err := json.Unmarshal(commandPayload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Commands) != 6 || payload.Commands[1].Command != "configure" {
+		t.Fatalf("unexpected command catalog: %+v", payload.Commands)
 	}
 }
 

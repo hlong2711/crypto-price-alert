@@ -22,6 +22,28 @@ const (
 	ActionCancel    CommandAction = "cancel"
 )
 
+// CommandDefinition describes a user-facing command supported by chat adapters.
+type CommandDefinition struct {
+	Action      CommandAction
+	Command     string
+	Description string
+}
+
+var publicCommandDefinitions = []CommandDefinition{
+	{Action: ActionHelp, Command: "help", Description: "Show available commands"},
+	{Action: ActionConfigure, Command: "configure", Description: "Configure symbols and intervals"},
+	{Action: ActionShow, Command: "show", Description: "Show current configuration"},
+	{Action: ActionEnable, Command: "enable", Description: "Enable alerts"},
+	{Action: ActionPause, Command: "pause", Description: "Pause alerts"},
+	{Action: ActionTest, Command: "test", Description: "Send a test alert"},
+}
+
+// PublicCommandDefinitions returns the commands adapters should expose in
+// native command menus. The returned slice is independent of package state.
+func PublicCommandDefinitions() []CommandDefinition {
+	return append([]CommandDefinition(nil), publicCommandDefinitions...)
+}
+
 func (a CommandAction) IsMutation() bool {
 	return a == ActionConfigure || a == ActionEnable || a == ActionPause || a == ActionTest || a == ActionSave || a == ActionCancel
 }

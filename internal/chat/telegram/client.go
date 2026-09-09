@@ -42,7 +42,7 @@ func (c *APIClient) SetMyCommands(ctx context.Context, commands []BotCommand) er
 
 // RegisterDefaultCommands publishes the Telegram command menu for discoverability.
 func (c *APIClient) RegisterDefaultCommands(ctx context.Context) error {
-	return c.SetMyCommands(ctx, commandList)
+	return c.SetMyCommands(ctx, botCommands())
 }
 
 func (c *APIClient) SendMessage(ctx context.Context, chatID int64, text string, keyboard *InlineKeyboardMarkup) error {

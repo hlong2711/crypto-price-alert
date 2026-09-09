@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -8,13 +9,17 @@ import (
 	"time"
 
 	"crypto-price-alert/internal/api"
+	"crypto-price-alert/internal/chat"
+	"crypto-price-alert/internal/chat/telegram"
 	"crypto-price-alert/internal/config"
 	"crypto-price-alert/internal/database"
+	"crypto-price-alert/internal/domain"
 	"crypto-price-alert/internal/market"
 	"crypto-price-alert/internal/notification"
 	"crypto-price-alert/internal/repository"
 	"crypto-price-alert/internal/scheduler"
 	"crypto-price-alert/internal/service"
+	"crypto-price-alert/internal/service/configuration"
 )
 
 func main() {
@@ -99,7 +104,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	initServer(logger, cfg.App.HTTP.Address, alertService, periods)
+	initServer(logger, cfg, cfg.App.HTTP.Address, alertService, periods, jobRepo)
 }
 
 func newNotifiers(cfg config.Config, logger *slog.Logger) ([]notification.Notifier, error) {
@@ -161,8 +166,24 @@ func notifierNames(cfg config.Config) []string {
 	return names
 }
 
-func initServer(logger *slog.Logger, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine) {
+func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine, repo *repository.PostgresRepository) {
 	e := api.NewServer(alerts, periods)
+
+	if cfg.Chat.Enabled && cfg.Chat.Telegram.Enabled {
+		chatHandler, err := newTelegramChatHandler(cfg, repo)
+		if err != nil {
+			logger.Error("failed to initialize Telegram chat handler", "error", err)
+			os.Exit(1)
+		}
+		api.RegisterTelegramWebhook(e, "/api/v1/chat/telegram/webhook", chatHandler.Webhook)
+		err = chatHandler.RegisterCommands(context.Background())
+		// register command is not fatal error
+		if err != nil {
+			logger.Error("failed to register Telegram commands", "error", err)
+		} else {
+			logger.Info("Telegram chat webhook registered", "path", "/api/v1/chat/telegram/webhook")
+		}
+	}
 
 	logger.Info("server initialized successfully", "address", address)
 
@@ -170,4 +191,25 @@ func initServer(logger *slog.Logger, address string, alerts *service.AlertServic
 		logger.Error("server stopped unexpectedly", "error", err)
 		os.Exit(1)
 	}
+}
+
+func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresRepository) (*telegram.Adapter, error) {
+	allowedIntervals := make([]domain.Interval, 0, len(cfg.Market.Intervals))
+	for _, value := range cfg.Market.Intervals {
+		allowedIntervals = append(allowedIntervals, domain.Interval(value))
+	}
+	configurationService, err := configuration.NewService(repo, repo, cfg.Market.Symbols, allowedIntervals, cfg.Chat.MaxSymbolsPerTarget, cfg.Chat.MaxTargets)
+	if err != nil {
+		return nil, err
+	}
+	sessions := chat.NewMemorySessionStore()
+	chatService, err := chat.NewService(configurationService, chat.CreatorAuthorizer{}, sessions, 15*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	client, err := telegram.NewAPIClient(cfg.Chat.Telegram.BotToken, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	return telegram.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Telegram.WebhookSecret, "default", cfg.Market.Symbols, allowedIntervals)
 }

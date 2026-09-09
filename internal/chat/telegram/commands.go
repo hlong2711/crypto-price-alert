@@ -11,13 +11,14 @@ import (
 	"crypto-price-alert/internal/domain"
 )
 
-var commandList = []BotCommand{
-	{Command: "help", Description: "Show available commands"},
-	{Command: "configure", Description: "Configure symbols and intervals"},
-	{Command: "show", Description: "Show current configuration"},
-	{Command: "enable", Description: "Enable alerts"},
-	{Command: "pause", Description: "Pause alerts"},
-	{Command: "test", Description: "Send a test alert"},
+// create command list for bot from generic chat command definition
+func botCommands() []BotCommand {
+	definitions := chat.PublicCommandDefinitions()
+	commands := make([]BotCommand, 0, len(definitions))
+	for _, definition := range definitions {
+		commands = append(commands, BotCommand{Command: definition.Command, Description: definition.Description})
+	}
+	return commands
 }
 
 type CommandService interface {

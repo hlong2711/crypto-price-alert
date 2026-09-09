@@ -74,6 +74,7 @@ type ChatConfig struct {
 
 type ChatTelegramConfig struct {
 	Enabled       bool   `yaml:"enabled"`
+	BotToken      string `yaml:"bot_token"`
 	WebhookSecret string `yaml:"webhook_secret"`
 }
 
@@ -170,8 +171,8 @@ func (c Config) Validate() error {
 		if strings.TrimSpace(c.Chat.WebhookBaseURL) == "" {
 			return errors.New("chat.webhook_base_url is required when chat is enabled")
 		}
-		if c.Chat.Telegram.Enabled && strings.TrimSpace(c.Chat.Telegram.WebhookSecret) == "" {
-			return errors.New("enabled chat.telegram requires webhook_secret")
+		if c.Chat.Telegram.Enabled && (strings.TrimSpace(c.Chat.Telegram.BotToken) == "" || strings.TrimSpace(c.Chat.Telegram.WebhookSecret) == "") {
+			return errors.New("enabled chat.telegram requires bot_token and webhook_secret")
 		}
 		if c.Chat.Slack.Enabled && (strings.TrimSpace(c.Chat.Slack.SigningSecret) == "" || strings.TrimSpace(c.Chat.Slack.BotToken) == "") {
 			return errors.New("enabled chat.slack requires signing_secret and bot_token")

@@ -420,7 +420,7 @@ Stop after command, authorization, and session tests pass. Proceed only after us
 
 **Status: DONE**
 
-Implemented in `internal/chat/telegram/` with an Echo route registration helper in `internal/api/routes.go`. Docker/integration testing remains deferred to the user's environment.
+Implemented in `internal/chat/telegram/`, registered conditionally from `cmd/server/main.go`, with an Echo route helper in `internal/api/routes.go`. Docker/integration testing remains deferred to the user's environment.
 
 #### Goal
 
