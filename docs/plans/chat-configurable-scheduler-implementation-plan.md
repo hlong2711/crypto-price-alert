@@ -307,6 +307,10 @@ Stop after configuration-service tests pass. Report the public service interface
 
 ### Phase 3 — Shared command model, sessions, and authorization
 
+**Status: DONE**
+
+Implemented in `internal/chat/` with an in-memory session store for the initial single-instance deployment. Docker/integration testing remains deferred to the user's environment.
+
 #### Goal
 
 Create platform-independent command processing and secure interactive configuration sessions.
