@@ -41,19 +41,25 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 		return "", fmt.Errorf("actor identity is required")
 	}
 	if command.Action.IsMutation() {
-		if err := s.authorizer.Authorize(ctx, AuthorizationRequest{Target: command.Target, ActorUserID: command.ActorUserID, Action: command.Action}); err != nil {
+		if err := s.authorizer.Authorize(ctx, AuthorizationRequest{
+			Target:      command.Target,
+			ActorUserID: command.ActorUserID,
+			Action:      command.Action,
+		}); err != nil {
 			return "", err
 		}
 	}
 	switch command.Action {
 	case ActionHelp:
 		return "help, configure, show, enable, pause, test", nil
+
 	case ActionShow:
 		config, err := s.configuration.GetConfig(ctx, command.Target.ID)
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("enabled=%t symbols=%s intervals=%s version=%d", config.Enabled, strings.Join(config.Symbols, ","), joinIntervals(config.Intervals), config.Version), nil
+
 	case ActionConfigure:
 		config, err := s.configuration.GetConfig(ctx, command.Target.ID)
 		if err != nil {
@@ -67,6 +73,7 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 			return "", err
 		}
 		return session.SessionID, nil
+
 	case ActionEnable, ActionPause:
 		config, err := s.configuration.GetConfig(ctx, command.Target.ID)
 		if err != nil {
@@ -82,8 +89,10 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 			return "", err
 		}
 		return fmt.Sprintf("enabled=%t version=%d", updated.Enabled, updated.Version), nil
+
 	case ActionSave:
 		return "", s.saveSession(ctx, command)
+
 	case ActionCancel:
 		if len(command.Arguments) != 1 {
 			return "", fmt.Errorf("cancel requires a session ID")
@@ -92,8 +101,10 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 			return "", err
 		}
 		return "cancelled", nil
+
 	case ActionTest:
 		return "test alert requested", nil
+
 	default:
 		return "", fmt.Errorf("unsupported action %q", command.Action)
 	}
@@ -101,7 +112,11 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 
 // UpdateSession replaces the selections in an actor-owned configuration session.
 func (s *Service) UpdateSession(ctx context.Context, command Command, symbols []string, intervals []domain.Interval) error {
-	if err := s.authorizer.Authorize(ctx, AuthorizationRequest{Target: command.Target, ActorUserID: command.ActorUserID, Action: ActionConfigure}); err != nil {
+	if err := s.authorizer.Authorize(ctx, AuthorizationRequest{
+		Target:      command.Target,
+		ActorUserID: command.ActorUserID,
+		Action:      ActionConfigure,
+	}); err != nil {
 		return err
 	}
 	if len(command.Arguments) != 1 {
@@ -137,7 +152,15 @@ func (s *Service) saveSession(ctx context.Context, command Command) error {
 	if config.Version != session.BaseConfigVersion {
 		return fmt.Errorf("configuration changed while session was open")
 	}
-	if _, err := s.configuration.ReplaceConfig(ctx, session.TargetID, session.SelectedSymbols, session.SelectedIntervals, config.Enabled, command.ActorUserID, session.BaseConfigVersion); err != nil {
+	if _, err := s.configuration.ReplaceConfig(
+		ctx,
+		session.TargetID,
+		session.SelectedSymbols,
+		session.SelectedIntervals,
+		config.Enabled,
+		command.ActorUserID,
+		session.BaseConfigVersion,
+	); err != nil {
 		return err
 	}
 	return s.sessions.Delete(ctx, session.SessionID)

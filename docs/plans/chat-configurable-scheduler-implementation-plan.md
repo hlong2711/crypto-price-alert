@@ -418,6 +418,10 @@ Stop after command, authorization, and session tests pass. Proceed only after us
 
 ### Phase 4 — Telegram adapter
 
+**Status: DONE**
+
+Implemented in `internal/chat/telegram/` with an Echo route registration helper in `internal/api/routes.go`. Docker/integration testing remains deferred to the user's environment.
+
 #### Goal
 
 Receive Telegram commands and provide native command discovery plus inline configuration controls.

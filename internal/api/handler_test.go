@@ -59,6 +59,17 @@ func TestNewServerRegistersRoutes(t *testing.T) {
 	}
 }
 
+func TestRegisterTelegramWebhook(t *testing.T) {
+	e := echo.New()
+	RegisterTelegramWebhook(e, "", func(c echo.Context) error { return c.NoContent(http.StatusAccepted) })
+	record := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/chat/telegram/webhook", nil)
+	e.ServeHTTP(record, request)
+	if record.Code != http.StatusAccepted {
+		t.Fatalf("status=%d, want %d", record.Code, http.StatusAccepted)
+	}
+}
+
 // --- fakes for RunAlert ---
 
 type stubProvider struct {
