@@ -185,6 +185,14 @@ func (r *PostgresRepository) ListEnabledTargets(ctx context.Context) ([]domain.A
 	return result, nil
 }
 
+func (r *PostgresRepository) CountTargets(ctx context.Context) (int64, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&database.AlertTarget{}).Count(&count).Error; err != nil {
+		return 0, fmt.Errorf("count alert targets: %w", err)
+	}
+	return count, nil
+}
+
 func (r *PostgresRepository) CreateAlertConfig(ctx context.Context, config domain.AlertConfig) error {
 	if err := config.Validate(); err != nil {
 		return fmt.Errorf("validate alert config: %w", err)

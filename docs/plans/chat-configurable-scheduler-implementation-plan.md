@@ -27,6 +27,8 @@ The first implementation turn should begin with Phase 0 only. The plan itself is
 
 ### Phase 0 — Baseline and implementation scaffolding
 
+**Status: DONE**
+
 #### Goal
 
 Establish a clean, measurable baseline before changing behavior.
@@ -75,6 +77,10 @@ Stop after baseline verification. Proceed only after the user approves the Phase
 ---
 
 ### Phase 1 — Domain types, database models, and migrations
+
+**Status: DONE**
+
+The PostgreSQL/Docker integration check is intentionally deferred to the user's environment. Unit tests, static analysis, and build verification passed.
 
 #### Goal
 
@@ -201,6 +207,8 @@ Stop and report the schema, migration behavior, test output, and compatibility r
 
 ### Phase 2 — Configuration service and validation
 
+**Status: DONE**
+
 #### Goal
 
 Create the application service that owns configuration changes independently of Telegram and Slack.
@@ -210,9 +218,9 @@ Create the application service that owns configuration changes independently of 
 ```text
 internal/config/config.go
 internal/config/config_test.go
-internal/configuration/service.go
-internal/configuration/validator.go
-internal/configuration/service_test.go
+internal/service/configuration/service.go
+internal/service/configuration/validator.go
+internal/service/configuration/service_test.go
 internal/domain/chat.go
 cmd/server/main.go
 ```
@@ -1239,7 +1247,7 @@ internal/chat/slack/
     signature.go
     types.go
 
-internal/configuration/
+internal/service/configuration/
     service.go
     validator.go
 

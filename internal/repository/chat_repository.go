@@ -15,6 +15,7 @@ type AlertTargetRepository interface {
 	FindOrCreateTarget(ctx context.Context, target domain.AlertTarget) (domain.AlertTarget, error)
 	GetTarget(ctx context.Context, provider domain.ChatProvider, tenantID, externalChatID string) (domain.AlertTarget, error)
 	ListEnabledTargets(ctx context.Context) ([]domain.AlertTarget, error)
+	CountTargets(ctx context.Context) (int64, error)
 }
 
 type AlertConfigRepository interface {
@@ -30,21 +31,14 @@ type InboundEventRepository interface {
 	MarkInboundEventFailed(ctx context.Context, provider domain.ChatProvider, externalEventID, reason string) error
 }
 
-
 func insertConfigChildren(tx *gorm.DB, targetID uuid.UUID, config domain.AlertConfig) error {
 	for _, symbol := range config.Symbols {
-		if err := tx.Create(&database.AlertConfigSymbol{
-			TargetID: targetID,
-			Symbol:   symbol,
-		}).Error; err != nil {
+		if err := tx.Create(&database.AlertConfigSymbol{TargetID: targetID, Symbol: symbol}).Error; err != nil {
 			return err
 		}
 	}
 	for _, interval := range config.Intervals {
-		if err := tx.Create(&database.AlertConfigInterval{
-			TargetID: targetID,
-			Interval: interval,
-		}).Error; err != nil {
+		if err := tx.Create(&database.AlertConfigInterval{TargetID: targetID, Interval: interval}).Error; err != nil {
 			return err
 		}
 	}
