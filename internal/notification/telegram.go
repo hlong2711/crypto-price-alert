@@ -19,6 +19,14 @@ type TelegramNotifier struct {
 	backoff     time.Duration
 }
 
+// SendToTarget delivers through Telegram using the target's external chat ID.
+func (n *TelegramNotifier) SendToTarget(ctx context.Context, target domain.AlertTarget, message domain.Message) error {
+	if target.Provider != domain.ChatProviderTelegram || target.ExternalChatID == "" {
+		return fmt.Errorf("invalid Telegram alert target")
+	}
+	return n.sendMessageToChat(ctx, target.ExternalChatID, RenderMessage(message))
+}
+
 func NewTelegramNotifier(botToken, chatID, baseURL string, client *http.Client, maxAttempts int, backoff time.Duration) (*TelegramNotifier, error) {
 	if botToken == "" || chatID == "" || maxAttempts < 1 || backoff <= 0 {
 		return nil, fmt.Errorf("invalid Telegram notifier settings")
@@ -48,7 +56,11 @@ type telegramPayload struct {
 }
 
 func (n *TelegramNotifier) SendMessage(ctx context.Context, messageText string) error {
-	payload, err := json.Marshal(telegramPayload{ChatID: n.chatID, Text: messageText})
+	return n.sendMessageToChat(ctx, n.chatID, messageText)
+}
+
+func (n *TelegramNotifier) sendMessageToChat(ctx context.Context, chatID, messageText string) error {
+	payload, err := json.Marshal(telegramPayload{ChatID: chatID, Text: messageText})
 	if err != nil {
 		return err
 	}

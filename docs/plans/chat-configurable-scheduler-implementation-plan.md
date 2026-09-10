@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation is proceeding under the gated phase protocol. Phases 0–5 are complete; the next phase requires explicit approval.
+Implementation is proceeding under the gated phase protocol. Phases 0–6 are complete; the next phase requires explicit approval.
 
 The existing working-tree change to `configs/config.yaml` must remain untouched.
 
@@ -607,6 +607,10 @@ Stop after Slack adapter tests pass. Proceed to scheduler integration only after
 ---
 
 ### Phase 6 — Target-aware notification delivery
+
+**Status: DONE**
+
+Implemented target-aware delivery in `internal/notification/` and `internal/service/alert.go`. Existing static notifier constructors and compatibility behavior remain available. Docker/integration testing remains deferred to the user's environment.
 
 #### Goal
 

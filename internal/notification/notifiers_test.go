@@ -52,6 +52,26 @@ func TestTelegramNotifierSendsMessage(t *testing.T) {
 	}
 }
 
+func TestTelegramNotifierSendsToTargetChat(t *testing.T) {
+	var gotBody string
+	client := &http.Client{Transport: notifierRoundTripper(func(r *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(r.Body)
+		gotBody = string(body)
+		return notifierResponse(http.StatusOK, `{"ok":true}`), nil
+	})}
+	notifier, err := NewTelegramNotifier("token", "legacy-chat", "http://telegram.test", client, 1, time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = notifier.SendToTarget(context.Background(), domain.AlertTarget{Provider: domain.ChatProviderTelegram, ExternalChatID: "target-chat"}, domain.Message{Title: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(gotBody, `"chat_id":"target-chat"`) {
+		t.Fatalf("message was sent to the wrong target: %s", gotBody)
+	}
+}
+
 func TestSlackNotifierRetriesTransientError(t *testing.T) {
 	calls := 0
 	client := &http.Client{Transport: notifierRoundTripper(func(r *http.Request) (*http.Response, error) {
@@ -70,6 +90,29 @@ func TestSlackNotifierRetriesTransientError(t *testing.T) {
 	}
 	if calls != 2 {
 		t.Fatalf("calls=%d, want 2", calls)
+	}
+}
+
+func TestSlackBotNotifierSendsToTargetChannel(t *testing.T) {
+	var bodies []string
+	client := &http.Client{Transport: notifierRoundTripper(func(r *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(body))
+		return notifierResponse(http.StatusOK, `{"ok":true}`), nil
+	})}
+
+	notifier, err := NewSlackBotNotifier("xoxb-token", "http://slack.test/api", client, 1, time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{"channel-a", "channel-b"} {
+		err = notifier.SendToTarget(context.Background(), domain.AlertTarget{Provider: domain.ChatProviderSlack, ExternalChatID: target}, domain.Message{Title: "hello"})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !strings.Contains(bodies[0], `"channel":"channel-a"`) || !strings.Contains(bodies[1], `"channel":"channel-b"`) {
+		t.Fatalf("messages were routed to the wrong channels: %v", bodies)
 	}
 }
 

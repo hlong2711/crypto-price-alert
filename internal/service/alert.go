@@ -72,6 +72,15 @@ func (s *AlertService) DefaultSymbols() []string {
 
 // Run fetches klines for period, builds the message and sends it unless dryRun.
 func (s *AlertService) Run(ctx context.Context, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
+	return s.run(ctx, nil, interval, period, symbols, dryRun)
+}
+
+// RunForTarget runs an alert and routes its notification to the supplied alert target.
+func (s *AlertService) RunForTarget(ctx context.Context, target domain.AlertTarget, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
+	return s.run(ctx, &target, interval, period, symbols, dryRun)
+}
+
+func (s *AlertService) run(ctx context.Context, target *domain.AlertTarget, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
 	if err := interval.Validate(); err != nil {
 		return RunResult{}, err
 	}
@@ -140,7 +149,13 @@ func (s *AlertService) Run(ctx context.Context, interval domain.Interval, period
 		if i < len(s.notifierNames) {
 			name = s.notifierNames[i]
 		}
-		if err := notifier.Send(ctx, message); err != nil {
+		var err error
+		if target != nil {
+			err = notification.SendToTarget(ctx, notifier, *target, message)
+		} else {
+			err = notifier.Send(ctx, message)
+		}
+		if err != nil {
 			sent[name] = "failed: " + err.Error()
 		} else {
 			sent[name] = "sent"
