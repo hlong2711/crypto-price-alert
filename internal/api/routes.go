@@ -28,3 +28,11 @@ func RegisterTelegramWebhook(e *echo.Echo, path string, handler echo.HandlerFunc
 	}
 	e.POST(path, handler)
 }
+
+// RegisterSlackWebhook attaches one Slack handler to an HTTP path.
+func RegisterSlackWebhook(e *echo.Echo, path string, handler echo.HandlerFunc) {
+	if len(path) == 0 {
+		return
+	}
+	e.POST(path, handler)
+}

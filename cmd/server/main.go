@@ -10,6 +10,7 @@ import (
 
 	"crypto-price-alert/internal/api"
 	"crypto-price-alert/internal/chat"
+	"crypto-price-alert/internal/chat/slack"
 	"crypto-price-alert/internal/chat/telegram"
 	"crypto-price-alert/internal/config"
 	"crypto-price-alert/internal/database"
@@ -184,6 +185,16 @@ func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *
 			logger.Info("Telegram chat webhook registered", "path", "/api/v1/chat/telegram/webhook")
 		}
 	}
+	if cfg.Chat.Enabled && cfg.Chat.Slack.Enabled {
+		chatHandler, err := newSlackChatHandler(cfg, repo)
+		if err != nil {
+			logger.Error("failed to initialize Slack chat handler", "error", err)
+			os.Exit(1)
+		}
+		api.RegisterSlackWebhook(e, "/api/v1/chat/slack/command", chatHandler.SlashCommandWebhook)
+		api.RegisterSlackWebhook(e, "/api/v1/chat/slack/interaction", chatHandler.InteractionWebhook)
+		logger.Info("Slack chat webhooks registered", "command_path", "/api/v1/chat/slack/command", "interaction_path", "/api/v1/chat/slack/interaction")
+	}
 
 	logger.Info("server initialized successfully", "address", address)
 
@@ -212,4 +223,25 @@ func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresReposito
 		return nil, err
 	}
 	return telegram.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Telegram.WebhookSecret, "default", cfg.Market.Symbols, allowedIntervals)
+}
+
+func newSlackChatHandler(cfg config.Config, repo *repository.PostgresRepository) (*slack.Adapter, error) {
+	allowedIntervals := make([]domain.Interval, 0, len(cfg.Market.Intervals))
+	for _, value := range cfg.Market.Intervals {
+		allowedIntervals = append(allowedIntervals, domain.Interval(value))
+	}
+	configurationService, err := configuration.NewService(repo, repo, cfg.Market.Symbols, allowedIntervals, cfg.Chat.MaxSymbolsPerTarget, cfg.Chat.MaxTargets)
+	if err != nil {
+		return nil, err
+	}
+	sessions := chat.NewMemorySessionStore()
+	chatService, err := chat.NewService(configurationService, chat.CreatorAuthorizer{}, sessions, 15*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	client, err := slack.NewAPIClient(cfg.Chat.Slack.BotToken, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	return slack.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Slack.SigningSecret, "default", cfg.Chat.Slack.AppID, cfg.Chat.Slack.TeamID, cfg.Market.Symbols, allowedIntervals)
 }

@@ -82,6 +82,8 @@ type ChatSlackConfig struct {
 	Enabled       bool   `yaml:"enabled"`
 	SigningSecret string `yaml:"signing_secret"`
 	BotToken      string `yaml:"bot_token"`
+	AppID         string `yaml:"app_id"`
+	TeamID        string `yaml:"team_id"`
 }
 
 type RetryConfig struct {

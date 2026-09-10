@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning only. No implementation changes are included in this document.
+Implementation is proceeding under the gated phase protocol. Phases 0–5 are complete; the next phase requires explicit approval.
 
 The existing working-tree change to `configs/config.yaml` must remain untouched.
 
@@ -505,6 +505,10 @@ Stop after Telegram adapter tests pass. Perform no Slack or scheduler work until
 
 ### Phase 5 — Slack adapter
 
+**Status: DONE**
+
+Implemented in `internal/chat/slack/`, with authenticated slash-command and Block Kit interaction routes registered conditionally from `cmd/server/main.go`. Docker/integration testing remains deferred to the user's environment.
+
 #### Goal
 
 Receive Slack commands and provide slash-command autocomplete plus Block Kit configuration controls.
@@ -520,6 +524,8 @@ internal/chat/slack/blocks.go
 internal/chat/slack/slack_test.go
 internal/api/routes.go
 cmd/server/main.go
+internal/config/config.go
+configs/config.example.yaml
 ```
 
 #### Ordered steps
@@ -539,6 +545,15 @@ cmd/server/main.go
 13. Re-check channel creator on every mutation.
 14. Save through the shared configuration service.
 15. Respond through the interaction response URL or Slack Web API.
+
+Implemented endpoints:
+
+```text
+POST /api/v1/chat/slack/command
+POST /api/v1/chat/slack/interaction
+```
+
+The Slack app slash-command manifest should point `/crypto-alert` at the command endpoint and use `help|configure|show|enable|pause|test` as its usage hint. Interactive Block Kit actions use the interaction endpoint.
 
 #### Slack command registration
 
