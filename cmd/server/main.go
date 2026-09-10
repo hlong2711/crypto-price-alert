@@ -74,6 +74,11 @@ func main() {
 		logger.Error("failed to initialize notification channels", "error", err)
 		os.Exit(1)
 	}
+	targetNotifiers, err := newTargetNotifiers(cfg, logger, notifiers)
+	if err != nil {
+		logger.Error("failed to initialize target notification channels", "error", err)
+		os.Exit(1)
+	}
 
 	periods, err := scheduler.NewPeriodEngine(location)
 	if err != nil {
@@ -85,8 +90,13 @@ func main() {
 		logger.Error("failed to initialize scheduler executor", "error", err)
 		os.Exit(1)
 	}
+	targetExecutor, err := scheduler.NewTargetExecutor(periods, provider, jobRepo, jobRepo, jobRepo, targetNotifiers, executor, location)
+	if err != nil {
+		logger.Error("failed to initialize target scheduler executor", "error", err)
+		os.Exit(1)
+	}
 
-	jobScheduler, err := scheduler.NewScheduler(location, executor)
+	jobScheduler, err := scheduler.NewScheduler(location, targetExecutor)
 	if err != nil {
 		logger.Error("failed to initialize scheduler", "error", err)
 		os.Exit(1)
@@ -151,6 +161,35 @@ func newNotifiers(cfg config.Config, logger *slog.Logger) ([]notification.Notifi
 	}
 	if len(notifiers) == 0 {
 		return nil, fmt.Errorf("no notification channels are enabled")
+	}
+	return notifiers, nil
+}
+
+func newTargetNotifiers(cfg config.Config, logger *slog.Logger, legacy []notification.Notifier) ([]notification.Notifier, error) {
+	if !cfg.Chat.Enabled {
+		return legacy, nil
+	}
+	notifiers := make([]notification.Notifier, 0, 2)
+	if cfg.Notifications.Dry {
+		return []notification.Notifier{notification.NewDryRunNotifier("target", logger)}, nil
+	}
+	if cfg.Chat.Telegram.Enabled {
+		telegram, err := notification.NewTelegramNotifier(cfg.Chat.Telegram.BotToken, "target", "", nil, cfg.Retry.MaxAttempts, cfg.Retry.InitialBackoff)
+		if err != nil {
+			return nil, fmt.Errorf("target telegram: %w", err)
+		}
+		notifiers = append(notifiers, telegram)
+	}
+
+	if cfg.Chat.Slack.Enabled {
+		slack, err := notification.NewSlackBotNotifier(cfg.Chat.Slack.BotToken, "", nil, cfg.Retry.MaxAttempts, cfg.Retry.InitialBackoff)
+		if err != nil {
+			return nil, fmt.Errorf("target slack: %w", err)
+		}
+		notifiers = append(notifiers, slack)
+	}
+	if len(notifiers) == 0 {
+		return legacy, nil
 	}
 	return notifiers, nil
 }

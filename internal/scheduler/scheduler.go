@@ -12,10 +12,15 @@ import (
 
 type Scheduler struct {
 	cron     *cron.Cron
-	executor *Executor
+	executor SchedulerExecutor
 }
 
-func NewScheduler(location *time.Location, executor *Executor) (*Scheduler, error) {
+// SchedulerExecutor is the scheduler operation invoked when a period boundary is reached.
+type SchedulerExecutor interface {
+	Execute(context.Context, time.Time, domain.Interval) error
+}
+
+func NewScheduler(location *time.Location, executor SchedulerExecutor) (*Scheduler, error) {
 	if location == nil || executor == nil {
 		return nil, fmt.Errorf("invalid scheduler settings")
 	}

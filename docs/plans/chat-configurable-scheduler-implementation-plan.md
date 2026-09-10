@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation is proceeding under the gated phase protocol. Phases 0–6 are complete; the next phase requires explicit approval.
+Implementation is proceeding under the gated phase protocol. Phases 0–7 are complete; the next phase requires explicit approval.
 
 The existing working-tree change to `configs/config.yaml` must remain untouched.
 
@@ -669,6 +669,10 @@ Stop after target-aware notification tests pass. Proceed only after approval.
 ---
 
 ### Phase 7 — Dynamic scheduler integration
+
+**Status: DONE**
+
+Implemented in `internal/scheduler/target_executor.go`, `internal/scheduler/scheduler.go`, and `cmd/server/main.go`. The scheduler loads enabled targets and their latest configurations on each due tick, skips paused or non-matching intervals, creates target-scoped idempotent jobs, routes through target-aware notifiers, and preserves the legacy executor when no targets exist. Docker/integration testing remains deferred to the user's environment.
 
 #### Goal
 

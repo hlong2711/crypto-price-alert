@@ -19,6 +19,9 @@ type TelegramNotifier struct {
 	backoff     time.Duration
 }
 
+// TargetProvider identifies Telegram destinations handled by this notifier.
+func (*TelegramNotifier) TargetProvider() domain.ChatProvider { return domain.ChatProviderTelegram }
+
 // SendToTarget delivers through Telegram using the target's external chat ID.
 func (n *TelegramNotifier) SendToTarget(ctx context.Context, target domain.AlertTarget, message domain.Message) error {
 	if target.Provider != domain.ChatProviderTelegram || target.ExternalChatID == "" {

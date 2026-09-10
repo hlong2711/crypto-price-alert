@@ -21,6 +21,9 @@ type SlackBotNotifier struct {
 	backoff     time.Duration
 }
 
+// TargetProvider identifies Slack destinations handled by this notifier.
+func (*SlackBotNotifier) TargetProvider() domain.ChatProvider { return domain.ChatProviderSlack }
+
 // NewSlackBotNotifier creates a Slack notifier that can address individual channels.
 func NewSlackBotNotifier(botToken, baseURL string, client *http.Client, maxAttempts int, backoff time.Duration) (*SlackBotNotifier, error) {
 	if botToken == "" || maxAttempts < 1 || backoff <= 0 {
