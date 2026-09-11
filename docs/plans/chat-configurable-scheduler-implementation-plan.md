@@ -743,7 +743,7 @@ Stop after scheduler tests pass. Report concurrency and consistency behavior. Pr
 
 **Status: DONE**
 
-Completed conditional Telegram/Slack route wiring, startup lifecycle validation, graceful HTTP shutdown, environment-secret documentation, and Docker Compose environment passthrough. Docker Compose validation remains deferred to the user's environment.
+Completed conditional Telegram/Slack route wiring, Telegram remote `setWebhook` registration from `chat.webhook_base_url`, startup lifecycle validation, graceful HTTP shutdown, environment-secret documentation, and Docker Compose environment passthrough. Docker Compose validation remains deferred to the user's environment.
 
 #### Goal
 

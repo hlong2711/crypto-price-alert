@@ -33,6 +33,11 @@ func (a *Adapter) RegisterCommands(ctx context.Context) error {
 	return a.client.RegisterDefaultCommands(ctx)
 }
 
+// RegisterWebhook configures Telegram to deliver updates to the public application URL.
+func (a *Adapter) RegisterWebhook(ctx context.Context, webhookURL string) error {
+	return a.client.SetWebhook(ctx, webhookURL, a.webhookSecret)
+}
+
 func NewAdapter(client *APIClient, targets TargetRepository, events EventRepository, commands CommandService, sessions chat.SessionStore, webhookSecret, tenantID string, symbols []string, intervals []domain.Interval) (*Adapter, error) {
 	if client == nil || targets == nil || events == nil || commands == nil || sessions == nil || strings.TrimSpace(webhookSecret) == "" || strings.TrimSpace(tenantID) == "" {
 		return nil, fmt.Errorf("invalid Telegram adapter settings")

@@ -40,6 +40,8 @@ chat:
     enabled: false
     bot_token: "${TELEGRAM_BOT_TOKEN}"
     webhook_secret: "${TELEGRAM_WEBHOOK_SECRET}"
+    # Set true for local development to skip Telegram setWebhook during startup.
+    skip_webhook_registration: false
   slack:
     enabled: false
     signing_secret: "${SLACK_SIGNING_SECRET}"

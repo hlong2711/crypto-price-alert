@@ -114,6 +114,31 @@ func TestAPIClientAndCommandRegistration(t *testing.T) {
 	}
 }
 
+func TestSetWebhook(t *testing.T) {
+	var method string
+	var payload struct {
+		URL         string `json:"url"`
+		SecretToken string `json:"secret_token"`
+	}
+	client, err := NewAPIClient("token", "http://telegram.test", &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		method = r.URL.Path
+		body, _ := io.ReadAll(r.Body)
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatal(err)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"ok":true}`))}, nil
+	})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.SetWebhook(context.Background(), "https://alerts.example.com/api/v1/chat/telegram/webhook", "secret"); err != nil {
+		t.Fatal(err)
+	}
+	if method != "/bottoken/setWebhook" || payload.URL != "https://alerts.example.com/api/v1/chat/telegram/webhook" || payload.SecretToken != "secret" {
+		t.Fatalf("unexpected setWebhook request: method=%s payload=%+v", method, payload)
+	}
+}
+
 func TestWebhookRejectsSecretAndDuplicate(t *testing.T) {
 	apiClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		body := `{"ok":true,"result":[]}`

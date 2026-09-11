@@ -39,6 +39,7 @@ chat:
     enabled: true
     bot_token: "${TELEGRAM_BOT_TOKEN}"
     webhook_secret: "${TELEGRAM_WEBHOOK_SECRET}"
+    skip_webhook_registration: false
   slack:
     enabled: false
     signing_secret: "${SLACK_SIGNING_SECRET}"

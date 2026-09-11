@@ -26,3 +26,7 @@ Webhook endpoints are:
 - Slack Block Kit interactions: `POST /api/v1/chat/slack/interaction`
 
 Expose these endpoints through HTTPS in deployments connected to Telegram or Slack. The application validates Telegram's secret token and Slack's signed request headers before processing requests. Health checks are available at `/api/health` and do not expose credentials.
+
+When Telegram chat is enabled, startup calls Telegram `setWebhook` with `chat.webhook_base_url` plus `/api/v1/chat/telegram/webhook`; `WEBHOOK_URL` must therefore be the externally reachable HTTPS base URL.
+
+For local development, set `chat.telegram.skip_webhook_registration: true` to serve the local route without changing Telegram's remote webhook configuration.

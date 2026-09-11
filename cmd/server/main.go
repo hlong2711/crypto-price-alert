@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -217,7 +218,22 @@ func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *
 			logger.Error("failed to initialize Telegram chat handler", "error", err)
 			os.Exit(1)
 		}
-		api.RegisterTelegramWebhook(e, "/api/v1/chat/telegram/webhook", chatHandler.Webhook)
+
+		webhookPath := "/api/v1/chat/telegram/webhook"
+		api.RegisterTelegramWebhook(e, webhookPath, chatHandler.Webhook)
+
+		if cfg.Chat.Telegram.SkipWebhookRegistration {
+			logger.Info("skipping Telegram webhook registration", "reason", "chat.telegram.skip_webhook_registration=true")
+		} else {
+			webhookURL := strings.TrimRight(cfg.Chat.WebhookBaseURL, "/") + webhookPath
+			err = chatHandler.RegisterWebhook(context.Background(), webhookURL)
+			if err != nil {
+				logger.Error("failed to register Telegram webhook", "error", err, "url", webhookURL)
+			} else {
+				logger.Info("Telegram webhook registered with Telegram", "url", webhookURL)
+			}
+		}
+
 		err = chatHandler.RegisterCommands(context.Background())
 		// register command is not fatal error
 		if err != nil {

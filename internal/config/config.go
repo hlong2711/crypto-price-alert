@@ -73,9 +73,10 @@ type ChatConfig struct {
 }
 
 type ChatTelegramConfig struct {
-	Enabled       bool   `yaml:"enabled"`
-	BotToken      string `yaml:"bot_token"`
-	WebhookSecret string `yaml:"webhook_secret"`
+	Enabled                 bool   `yaml:"enabled"`
+	BotToken                string `yaml:"bot_token"`
+	WebhookSecret           string `yaml:"webhook_secret"`
+	SkipWebhookRegistration bool   `yaml:"skip_webhook_registration"`
 }
 
 type ChatSlackConfig struct {

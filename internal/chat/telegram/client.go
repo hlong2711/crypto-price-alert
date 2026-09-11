@@ -40,6 +40,17 @@ func (c *APIClient) SetMyCommands(ctx context.Context, commands []BotCommand) er
 	return c.call(ctx, "setMyCommands", map[string]any{"commands": commands}, nil)
 }
 
+// SetWebhook tells Telegram which public HTTPS endpoint should receive updates.
+func (c *APIClient) SetWebhook(ctx context.Context, webhookURL, secretToken string) error {
+	if strings.TrimSpace(webhookURL) == "" || strings.TrimSpace(secretToken) == "" {
+		return fmt.Errorf("Telegram webhook URL and secret token are required")
+	}
+	return c.call(ctx, "setWebhook", map[string]any{
+		"url":          webhookURL,
+		"secret_token": secretToken,
+	}, nil)
+}
+
 // RegisterDefaultCommands publishes the Telegram command menu for discoverability.
 func (c *APIClient) RegisterDefaultCommands(ctx context.Context) error {
 	return c.SetMyCommands(ctx, botCommands())
