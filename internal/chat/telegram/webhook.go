@@ -101,7 +101,7 @@ func (a *Adapter) process(c echo.Context, update Update) error {
 
 		action, args, err := chat.ParseCommand(update.Message.Text)
 		if err != nil {
-			return a.client.SendMessage(ctx, update.Message.Chat.ID, "Unknown command. Use /crypto-alert help.", nil)
+			return a.client.SendMessage(ctx, update.Message.Chat.ID, "Unknown command. Use /help.", nil)
 		}
 
 		response, err := a.commands.Handle(ctx,

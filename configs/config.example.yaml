@@ -35,7 +35,7 @@ chat:
   enabled: false
   max_symbols_per_target: 20
   max_targets: 100
-  webhook_base_url: "https://alerts.example.com"
+  webhook_base_url: "${WEBHOOK_URL}"
   telegram:
     enabled: false
     bot_token: "${TELEGRAM_BOT_TOKEN}"

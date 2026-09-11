@@ -30,6 +30,22 @@ notifications:
     enabled: false
     webhook_url: "${SLACK_WEBHOOK_URL}"
 
+chat:
+  enabled: true
+  max_symbols_per_target: 20
+  max_targets: 100
+  webhook_base_url: "${WEBHOOK_URL}"
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    webhook_secret: "${TELEGRAM_WEBHOOK_SECRET}"
+  slack:
+    enabled: false
+    signing_secret: "${SLACK_SIGNING_SECRET}"
+    bot_token: "${SLACK_BOT_TOKEN}"
+    app_id: "${SLACK_APP_ID}"
+    team_id: "${SLACK_TEAM_ID}"
+
 retry:
   max_attempts: 3
   initial_backoff: 500ms
