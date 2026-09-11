@@ -118,6 +118,7 @@ func (a *Adapter) process(c echo.Context, update Update) error {
 				EventID:     fmt.Sprintf("%d", update.UpdateID),
 			})
 		if err != nil {
+			c.Logger().Errorf("Processing error %v", err)
 			return a.client.SendMessage(ctx, update.Message.Chat.ID, safeError(err), nil)
 		}
 

@@ -33,7 +33,7 @@ services:
       SLACK_APP_ID: ${SLACK_APP_ID:-}
       SLACK_TEAM_ID: ${SLACK_TEAM_ID:-}
     volumes:
-      - ./configs/config.yaml:/app/configs/config.yaml
+      - ./configs/config.dev.yaml:/app/configs/config.yaml
       - ./:/app
     depends_on:
       postgres:
