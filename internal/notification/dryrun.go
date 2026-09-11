@@ -24,3 +24,9 @@ func (n *DryRunNotifier) Send(_ context.Context, message domain.Message) error {
 	n.logger.Info("notification dry run", "notifier", n.name, "message", RenderMessage(message))
 	return nil
 }
+
+// SendToTarget logs the destination while preserving dry-run behavior.
+func (n *DryRunNotifier) SendToTarget(_ context.Context, target domain.AlertTarget, message domain.Message) error {
+	n.logger.Info("notification dry run", "notifier", n.name, "target_id", target.ID, "target", target.ExternalChatID, "message", RenderMessage(message))
+	return nil
+}

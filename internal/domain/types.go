@@ -71,7 +71,7 @@ const (
 )
 
 type Job struct {
-	ID, Symbol             string
+	ID, TargetID, Symbol   string
 	Interval               Interval
 	PeriodStart, PeriodEnd time.Time
 	Status                 JobStatus
@@ -97,4 +97,95 @@ type Message struct {
 	Title  string
 	Period Period
 	Lines  []string
+}
+
+type ChatProvider string
+
+const (
+	ChatProviderTelegram ChatProvider = "telegram"
+	ChatProviderSlack    ChatProvider = "slack"
+	ChatProviderLegacy   ChatProvider = "legacy"
+)
+
+func (p ChatProvider) Validate() error {
+	if p != ChatProviderTelegram && p != ChatProviderSlack && p != ChatProviderLegacy {
+		return fmt.Errorf("unsupported chat provider %q", p)
+	}
+	return nil
+}
+
+type AlertTarget struct {
+	ID             string
+	Provider       ChatProvider
+	TenantID       string
+	ExternalChatID string
+	DisplayName    string
+	CreatorUserID  string
+	Enabled        bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+func (t AlertTarget) Validate() error {
+	if t.ID == "" || t.Provider == "" || t.TenantID == "" || t.ExternalChatID == "" || t.CreatorUserID == "" {
+		return fmt.Errorf("invalid alert target")
+	}
+	return t.Provider.Validate()
+}
+
+type AlertConfig struct {
+	TargetID  string
+	Enabled   bool
+	Symbols   []string
+	Intervals []Interval
+	Version   int64
+	UpdatedBy string
+	UpdatedAt time.Time
+}
+
+func (c AlertConfig) Validate() error {
+	if c.TargetID == "" || c.Version < 0 || c.UpdatedBy == "" {
+		return fmt.Errorf("invalid alert config")
+	}
+	if len(c.Symbols) == 0 || len(c.Intervals) == 0 {
+		return fmt.Errorf("alert config requires symbols and intervals")
+	}
+	seenSymbols := make(map[string]struct{}, len(c.Symbols))
+	for _, symbol := range c.Symbols {
+		if symbol == "" {
+			return fmt.Errorf("alert config contains an empty symbol")
+		}
+		if _, ok := seenSymbols[symbol]; ok {
+			return fmt.Errorf("duplicate alert symbol %q", symbol)
+		}
+		seenSymbols[symbol] = struct{}{}
+	}
+	seenIntervals := make(map[Interval]struct{}, len(c.Intervals))
+	for _, interval := range c.Intervals {
+		if err := interval.Validate(); err != nil {
+			return err
+		}
+		if _, ok := seenIntervals[interval]; ok {
+			return fmt.Errorf("duplicate alert interval %q", interval)
+		}
+		seenIntervals[interval] = struct{}{}
+	}
+	return nil
+}
+
+type InboundEvent struct {
+	ID              string
+	Provider        ChatProvider
+	ExternalEventID string
+	ReceivedAt      time.Time
+	ProcessedAt     *time.Time
+	Status          string
+	ErrorMessage    string
+}
+
+func (e InboundEvent) Validate() error {
+	if e.ID == "" || e.ExternalEventID == "" || e.ReceivedAt.IsZero() || e.Status == "" {
+		return fmt.Errorf("invalid inbound event")
+	}
+	return e.Provider.Validate()
 }

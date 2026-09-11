@@ -46,6 +46,32 @@ func TestConfigValidateRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+func TestConfigValidateChatSettings(t *testing.T) {
+	cfg := validConfig()
+	cfg.Chat = ChatConfig{Enabled: true, MaxSymbolsPerTarget: 20, MaxTargets: 10, WebhookBaseURL: "https://alerts.example.com", Telegram: ChatTelegramConfig{Enabled: true, BotToken: "token", WebhookSecret: "secret"}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected valid chat config, got %v", err)
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+	}{
+		{"missing webhook URL", func(c *Config) { c.Chat.WebhookBaseURL = "" }},
+		{"missing Telegram secret", func(c *Config) { c.Chat.Telegram.WebhookSecret = "" }},
+		{"missing platform", func(c *Config) { c.Chat.Telegram.Enabled = false }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			candidate := cfg
+			tt.mutate(&candidate)
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("expected chat validation error")
+			}
+		})
+	}
+}
+
 func TestLoadExpandsEnvironmentVariables(t *testing.T) {
 	t.Setenv("TEST_DATABASE_URL", "postgres://example/crypto_alert")
 	dir := t.TempDir()

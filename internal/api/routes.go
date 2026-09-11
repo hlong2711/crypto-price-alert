@@ -19,3 +19,20 @@ func NewServer(alerts *service.AlertService, periods *scheduler.PeriodEngine) *e
 	e.POST("/api/v1/alerts/run", handler.RunAlert)
 	return e
 }
+
+// RegisterTelegramWebhook attaches an authenticated Telegram adapter handler
+// without making the API package depend on Telegram payload types.
+func RegisterTelegramWebhook(e *echo.Echo, path string, handler echo.HandlerFunc) {
+	if path == "" {
+		path = "/api/v1/chat/telegram/webhook"
+	}
+	e.POST(path, handler)
+}
+
+// RegisterSlackWebhook attaches one Slack handler to an HTTP path.
+func RegisterSlackWebhook(e *echo.Echo, path string, handler echo.HandlerFunc) {
+	if len(path) == 0 {
+		return
+	}
+	e.POST(path, handler)
+}

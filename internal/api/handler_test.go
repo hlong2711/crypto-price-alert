@@ -59,6 +59,37 @@ func TestNewServerRegistersRoutes(t *testing.T) {
 	}
 }
 
+func TestRegisterTelegramWebhook(t *testing.T) {
+	e := echo.New()
+	RegisterTelegramWebhook(e, "", func(c echo.Context) error { return c.NoContent(http.StatusAccepted) })
+	record := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/chat/telegram/webhook", nil)
+	e.ServeHTTP(record, request)
+	if record.Code != http.StatusAccepted {
+		t.Fatalf("status=%d, want %d", record.Code, http.StatusAccepted)
+	}
+}
+
+func TestRegisterSlackWebhook(t *testing.T) {
+	e := echo.New()
+	RegisterSlackWebhook(e, "/api/v1/chat/slack/command", func(c echo.Context) error { return c.NoContent(http.StatusAccepted) })
+	RegisterSlackWebhook(e, "/api/v1/chat/slack/interaction", func(c echo.Context) error { return c.NoContent(http.StatusCreated) })
+	for _, test := range []struct {
+		path string
+		want int
+	}{
+		{path: "/api/v1/chat/slack/command", want: http.StatusAccepted},
+		{path: "/api/v1/chat/slack/interaction", want: http.StatusCreated},
+	} {
+		record := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, test.path, nil)
+		e.ServeHTTP(record, request)
+		if record.Code != test.want {
+			t.Fatalf("%s status=%d, want %d", test.path, record.Code, test.want)
+		}
+	}
+}
+
 // --- fakes for RunAlert ---
 
 type stubProvider struct {

@@ -1,20 +1,29 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 	"time"
 
 	"crypto-price-alert/internal/api"
+	"crypto-price-alert/internal/chat"
+	"crypto-price-alert/internal/chat/slack"
+	"crypto-price-alert/internal/chat/telegram"
 	"crypto-price-alert/internal/config"
 	"crypto-price-alert/internal/database"
+	"crypto-price-alert/internal/domain"
 	"crypto-price-alert/internal/market"
 	"crypto-price-alert/internal/notification"
 	"crypto-price-alert/internal/repository"
 	"crypto-price-alert/internal/scheduler"
 	"crypto-price-alert/internal/service"
+	"crypto-price-alert/internal/service/configuration"
 )
 
 func main() {
@@ -68,6 +77,11 @@ func main() {
 		logger.Error("failed to initialize notification channels", "error", err)
 		os.Exit(1)
 	}
+	targetNotifiers, err := newTargetNotifiers(cfg, logger, notifiers)
+	if err != nil {
+		logger.Error("failed to initialize target notification channels", "error", err)
+		os.Exit(1)
+	}
 
 	periods, err := scheduler.NewPeriodEngine(location)
 	if err != nil {
@@ -79,8 +93,13 @@ func main() {
 		logger.Error("failed to initialize scheduler executor", "error", err)
 		os.Exit(1)
 	}
+	targetExecutor, err := scheduler.NewTargetExecutor(periods, provider, jobRepo, jobRepo, jobRepo, targetNotifiers, executor, location)
+	if err != nil {
+		logger.Error("failed to initialize target scheduler executor", "error", err)
+		os.Exit(1)
+	}
 
-	jobScheduler, err := scheduler.NewScheduler(location, executor)
+	jobScheduler, err := scheduler.NewScheduler(location, targetExecutor)
 	if err != nil {
 		logger.Error("failed to initialize scheduler", "error", err)
 		os.Exit(1)
@@ -99,7 +118,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	initServer(logger, cfg.App.HTTP.Address, alertService, periods)
+	initServer(logger, cfg, cfg.App.HTTP.Address, alertService, periods, jobRepo)
 }
 
 func newNotifiers(cfg config.Config, logger *slog.Logger) ([]notification.Notifier, error) {
@@ -149,6 +168,35 @@ func newNotifiers(cfg config.Config, logger *slog.Logger) ([]notification.Notifi
 	return notifiers, nil
 }
 
+func newTargetNotifiers(cfg config.Config, logger *slog.Logger, legacy []notification.Notifier) ([]notification.Notifier, error) {
+	if !cfg.Chat.Enabled {
+		return legacy, nil
+	}
+	notifiers := make([]notification.Notifier, 0, 2)
+	if cfg.Notifications.Dry {
+		return []notification.Notifier{notification.NewDryRunNotifier("target", logger)}, nil
+	}
+	if cfg.Chat.Telegram.Enabled {
+		telegram, err := notification.NewTelegramNotifier(cfg.Chat.Telegram.BotToken, "target", "", nil, cfg.Retry.MaxAttempts, cfg.Retry.InitialBackoff)
+		if err != nil {
+			return nil, fmt.Errorf("target telegram: %w", err)
+		}
+		notifiers = append(notifiers, telegram)
+	}
+
+	if cfg.Chat.Slack.Enabled {
+		slack, err := notification.NewSlackBotNotifier(cfg.Chat.Slack.BotToken, "", nil, cfg.Retry.MaxAttempts, cfg.Retry.InitialBackoff)
+		if err != nil {
+			return nil, fmt.Errorf("target slack: %w", err)
+		}
+		notifiers = append(notifiers, slack)
+	}
+	if len(notifiers) == 0 {
+		return legacy, nil
+	}
+	return notifiers, nil
+}
+
 /* Get name list of enabled notifiers */
 func notifierNames(cfg config.Config) []string {
 	names := make([]string, 0, 2)
@@ -161,13 +209,114 @@ func notifierNames(cfg config.Config) []string {
 	return names
 }
 
-func initServer(logger *slog.Logger, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine) {
+func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine, repo *repository.PostgresRepository) {
 	e := api.NewServer(alerts, periods)
+
+	if cfg.Chat.Enabled && cfg.Chat.Telegram.Enabled {
+		chatHandler, err := newTelegramChatHandler(cfg, repo)
+		if err != nil {
+			logger.Error("failed to initialize Telegram chat handler", "error", err)
+			os.Exit(1)
+		}
+
+		webhookPath := "/api/v1/chat/telegram/webhook"
+		api.RegisterTelegramWebhook(e, webhookPath, chatHandler.Webhook)
+
+		if cfg.Chat.Telegram.SkipWebhookRegistration {
+			logger.Info("skipping Telegram webhook registration", "reason", "chat.telegram.skip_webhook_registration=true")
+		} else {
+			webhookURL := strings.TrimRight(cfg.Chat.WebhookBaseURL, "/") + webhookPath
+			err = chatHandler.RegisterWebhook(context.Background(), webhookURL)
+			if err != nil {
+				logger.Error("failed to register Telegram webhook", "error", err, "url", webhookURL)
+			} else {
+				logger.Info("Telegram webhook registered with Telegram", "url", webhookURL)
+			}
+		}
+
+		err = chatHandler.RegisterCommands(context.Background())
+		// register command is not fatal error
+		if err != nil {
+			logger.Error("failed to register Telegram commands", "error", err)
+		} else {
+			logger.Info("Telegram chat webhook registered", "path", "/api/v1/chat/telegram/webhook")
+		}
+	}
+	if cfg.Chat.Enabled && cfg.Chat.Slack.Enabled {
+		chatHandler, err := newSlackChatHandler(cfg, repo)
+		if err != nil {
+			logger.Error("failed to initialize Slack chat handler", "error", err)
+			os.Exit(1)
+		}
+		api.RegisterSlackWebhook(e, "/api/v1/chat/slack/command", chatHandler.SlashCommandWebhook)
+		api.RegisterSlackWebhook(e, "/api/v1/chat/slack/interaction", chatHandler.InteractionWebhook)
+		logger.Info("Slack chat webhooks registered", "command_path", "/api/v1/chat/slack/command", "interaction_path", "/api/v1/chat/slack/interaction")
+	}
 
 	logger.Info("server initialized successfully", "address", address)
 
-	if err := e.Start(address); err != nil && err != http.ErrServerClosed {
-		logger.Error("server stopped unexpectedly", "error", err)
-		os.Exit(1)
+	serverErrors := make(chan error, 1)
+	go func() {
+		serverErrors <- e.Start(address)
+	}()
+
+	shutdownSignals := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdownSignals)
+
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			logger.Error("server stopped unexpectedly", "error", err)
+		}
+	case sig := <-shutdownSignals:
+		logger.Info("shutdown signal received", "signal", sig.String())
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := e.Shutdown(ctx); err != nil {
+			logger.Error("server shutdown failed", "error", err)
+		}
 	}
+}
+
+func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresRepository) (*telegram.Adapter, error) {
+	allowedIntervals := make([]domain.Interval, 0, len(cfg.Market.Intervals))
+	for _, value := range cfg.Market.Intervals {
+		allowedIntervals = append(allowedIntervals, domain.Interval(value))
+	}
+	configurationService, err := configuration.NewService(repo, repo, cfg.Market.Symbols, allowedIntervals, cfg.Chat.MaxSymbolsPerTarget, cfg.Chat.MaxTargets)
+	if err != nil {
+		return nil, err
+	}
+	sessions := chat.NewMemorySessionStore()
+	chatService, err := chat.NewService(configurationService, chat.CreatorAuthorizer{}, sessions, 15*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	client, err := telegram.NewAPIClient(cfg.Chat.Telegram.BotToken, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	return telegram.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Telegram.WebhookSecret, "default", cfg.Market.Symbols, allowedIntervals)
+}
+
+func newSlackChatHandler(cfg config.Config, repo *repository.PostgresRepository) (*slack.Adapter, error) {
+	allowedIntervals := make([]domain.Interval, 0, len(cfg.Market.Intervals))
+	for _, value := range cfg.Market.Intervals {
+		allowedIntervals = append(allowedIntervals, domain.Interval(value))
+	}
+	configurationService, err := configuration.NewService(repo, repo, cfg.Market.Symbols, allowedIntervals, cfg.Chat.MaxSymbolsPerTarget, cfg.Chat.MaxTargets)
+	if err != nil {
+		return nil, err
+	}
+	sessions := chat.NewMemorySessionStore()
+	chatService, err := chat.NewService(configurationService, chat.CreatorAuthorizer{}, sessions, 15*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	client, err := slack.NewAPIClient(cfg.Chat.Slack.BotToken, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	return slack.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Slack.SigningSecret, "default", cfg.Chat.Slack.AppID, cfg.Chat.Slack.TeamID, cfg.Market.Symbols, allowedIntervals)
 }

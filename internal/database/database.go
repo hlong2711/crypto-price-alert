@@ -22,8 +22,42 @@ func Migrate(db *gorm.DB) error {
 	if db == nil {
 		return fmt.Errorf("database handle is nil")
 	}
-	return db.AutoMigrate(&NotificationJob{})
+
+	if err := db.AutoMigrate(
+		&AlertTarget{},
+		&AlertConfig{},
+		&AlertConfigSymbol{},
+		&AlertConfigInterval{},
+		&InboundEvent{},
+	); err != nil {
+		return err
+	}
+
+	if db.Migrator().HasTable(&NotificationJob{}) {
+		if err := db.Exec("ALTER TABLE notification_jobs ADD COLUMN IF NOT EXISTS target_id uuid").Error; err != nil {
+			return fmt.Errorf("add notification job target ID: %w", err)
+		}
+		if err := db.Exec("UPDATE notification_jobs SET target_id = ? WHERE target_id IS NULL", LegacyTargetID).Error; err != nil {
+			return fmt.Errorf("backfill notification job target ID: %w", err)
+		}
+		if err := db.Exec("ALTER TABLE notification_jobs ALTER COLUMN target_id SET NOT NULL").Error; err != nil {
+			return fmt.Errorf("require notification job target ID: %w", err)
+		}
+		if err := db.Exec("DROP INDEX IF EXISTS idx_notification_jobs_key").Error; err != nil {
+			return fmt.Errorf("drop legacy notification job index: %w", err)
+		}
+	}
+
+	if err := db.AutoMigrate(
+		&NotificationJob{},
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
+
+const LegacyTargetID = "00000000-0000-0000-0000-000000000001"
 
 func Close(db *gorm.DB) error {
 	if db == nil {

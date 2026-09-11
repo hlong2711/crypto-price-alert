@@ -17,6 +17,7 @@ type Config struct {
 	Market        MarketConfig        `yaml:"market"`
 	Schedule      ScheduleConfig      `yaml:"schedule"`
 	Notifications NotificationsConfig `yaml:"notifications"`
+	Chat          ChatConfig          `yaml:"chat"`
 	Retry         RetryConfig         `yaml:"retry"`
 	Concurrency   ConcurrencyConfig   `yaml:"concurrency"`
 }
@@ -60,6 +61,30 @@ type TelegramConfig struct {
 type SlackConfig struct {
 	Enabled    bool   `yaml:"enabled"`
 	WebhookURL string `yaml:"webhook_url"`
+}
+
+type ChatConfig struct {
+	Enabled             bool               `yaml:"enabled"`
+	MaxSymbolsPerTarget int                `yaml:"max_symbols_per_target"`
+	MaxTargets          int                `yaml:"max_targets"`
+	WebhookBaseURL      string             `yaml:"webhook_base_url"`
+	Telegram            ChatTelegramConfig `yaml:"telegram"`
+	Slack               ChatSlackConfig    `yaml:"slack"`
+}
+
+type ChatTelegramConfig struct {
+	Enabled                 bool   `yaml:"enabled"`
+	BotToken                string `yaml:"bot_token"`
+	WebhookSecret           string `yaml:"webhook_secret"`
+	SkipWebhookRegistration bool   `yaml:"skip_webhook_registration"`
+}
+
+type ChatSlackConfig struct {
+	Enabled       bool   `yaml:"enabled"`
+	SigningSecret string `yaml:"signing_secret"`
+	BotToken      string `yaml:"bot_token"`
+	AppID         string `yaml:"app_id"`
+	TeamID        string `yaml:"team_id"`
 }
 
 type RetryConfig struct {
@@ -138,6 +163,26 @@ func (c Config) Validate() error {
 	}
 	if c.Concurrency.MarketRequests < 1 {
 		return errors.New("concurrency.market_requests must be at least 1")
+	}
+	if c.Chat.Enabled {
+		if c.Chat.MaxSymbolsPerTarget < 1 {
+			return errors.New("chat.max_symbols_per_target must be at least 1")
+		}
+		if c.Chat.MaxTargets < 1 {
+			return errors.New("chat.max_targets must be at least 1")
+		}
+		if strings.TrimSpace(c.Chat.WebhookBaseURL) == "" {
+			return errors.New("chat.webhook_base_url is required when chat is enabled")
+		}
+		if c.Chat.Telegram.Enabled && (strings.TrimSpace(c.Chat.Telegram.BotToken) == "" || strings.TrimSpace(c.Chat.Telegram.WebhookSecret) == "") {
+			return errors.New("enabled chat.telegram requires bot_token and webhook_secret")
+		}
+		if c.Chat.Slack.Enabled && (strings.TrimSpace(c.Chat.Slack.SigningSecret) == "" || strings.TrimSpace(c.Chat.Slack.BotToken) == "") {
+			return errors.New("enabled chat.slack requires signing_secret and bot_token")
+		}
+		if !c.Chat.Telegram.Enabled && !c.Chat.Slack.Enabled {
+			return errors.New("at least one chat platform must be enabled")
+		}
 	}
 	return nil
 }
