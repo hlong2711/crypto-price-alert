@@ -21,7 +21,7 @@ schedule:
   active_until: "23:00"
 
 notifications:
-  dry: true
+  dry: false
   telegram:
     enabled: true
     bot_token: "${TELEGRAM_BOT_TOKEN}"
