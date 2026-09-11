@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"crypto-price-alert/internal/api"
@@ -237,9 +239,27 @@ func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *
 
 	logger.Info("server initialized successfully", "address", address)
 
-	if err := e.Start(address); err != nil && err != http.ErrServerClosed {
-		logger.Error("server stopped unexpectedly", "error", err)
-		os.Exit(1)
+	serverErrors := make(chan error, 1)
+	go func() {
+		serverErrors <- e.Start(address)
+	}()
+
+	shutdownSignals := make(chan os.Signal, 1)
+	signal.Notify(shutdownSignals, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdownSignals)
+
+	select {
+	case err := <-serverErrors:
+		if err != nil && err != http.ErrServerClosed {
+			logger.Error("server stopped unexpectedly", "error", err)
+		}
+	case sig := <-shutdownSignals:
+		logger.Info("shutdown signal received", "signal", sig.String())
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := e.Shutdown(ctx); err != nil {
+			logger.Error("server shutdown failed", "error", err)
+		}
 	}
 }
 

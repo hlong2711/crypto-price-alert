@@ -24,7 +24,12 @@ services:
       DATABASE_URL: postgres://crypto_alert:crypto_alert@postgres:5432/crypto_alert?sslmode=disable
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_ID: ${SLACK_APP_ID:-}
+      SLACK_TEAM_ID: ${SLACK_TEAM_ID:-}
     volumes:
       - ./configs/config.yaml:/app/configs/config.yaml
       - ./:/app

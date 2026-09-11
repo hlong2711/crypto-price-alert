@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation is proceeding under the gated phase protocol. Phases 0–7 are complete; the next phase requires explicit approval.
+Implementation is proceeding under the gated phase protocol. Phases 0–8 are complete; the next phase requires explicit approval.
 
 The existing working-tree change to `configs/config.yaml` must remain untouched.
 
@@ -740,6 +740,10 @@ Stop after scheduler tests pass. Report concurrency and consistency behavior. Pr
 ---
 
 ### Phase 8 — HTTP wiring, startup, and deployment
+
+**Status: DONE**
+
+Completed conditional Telegram/Slack route wiring, startup lifecycle validation, graceful HTTP shutdown, environment-secret documentation, and Docker Compose environment passthrough. Docker Compose validation remains deferred to the user's environment.
 
 #### Goal
 
