@@ -24,6 +24,7 @@ services:
       DATABASE_URL: postgres://crypto_alert:crypto_alert@postgres:5432/crypto_alert?sslmode=disable
       WEBHOOK_URL: ${WEBHOOK_URL:-'http://localhost:8080'}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_CHAT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}

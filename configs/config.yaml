@@ -37,7 +37,7 @@ chat:
   webhook_base_url: "${WEBHOOK_URL}"
   telegram:
     enabled: true
-    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    bot_token: "${TELEGRAM_BOT_CHAT_TOKEN}"
     webhook_secret: "${TELEGRAM_WEBHOOK_SECRET}"
     skip_webhook_registration: false
   slack:
