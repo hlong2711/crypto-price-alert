@@ -10,8 +10,8 @@ market:
   provider: binance
   symbols:
     - BTCUSDT
-    # - ETHUSDT
-    # - SOLUSDT
+    - ETHUSDT
+    - SOLUSDT
   intervals:
     - 1h
     - 4h
