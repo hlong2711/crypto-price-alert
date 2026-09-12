@@ -22,15 +22,17 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 
 type fakeEvents struct {
 	claimed   bool
+	message   string
 	processed bool
 	failed    bool
 }
 
-func (f *fakeEvents) ClaimInboundEvent(context.Context, domain.InboundEvent) (bool, error) {
+func (f *fakeEvents) ClaimInboundEvent(_ context.Context, event domain.InboundEvent) (bool, error) {
 	if f.claimed {
 		return false, nil
 	}
 	f.claimed = true
+	f.message = event.Message
 	return true, nil
 }
 func (f *fakeEvents) MarkInboundEventProcessed(context.Context, domain.ChatProvider, string, time.Time) error {
@@ -178,6 +180,9 @@ func TestWebhookRejectsSecretAndDuplicate(t *testing.T) {
 	}
 	if recorder.Code != http.StatusOK || !events.processed || events.failed {
 		t.Fatalf("unexpected first webhook result: code=%d processed=%t failed=%t", recorder.Code, events.processed, events.failed)
+	}
+	if events.message != "/crypto-alert help" {
+		t.Fatalf("unexpected inbound message: %q", events.message)
 	}
 
 	request = httptest.NewRequest(http.MethodPost, "/telegram", strings.NewReader(string(payload)))

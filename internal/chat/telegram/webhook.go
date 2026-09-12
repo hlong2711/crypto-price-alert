@@ -73,6 +73,7 @@ func (a *Adapter) Webhook(c echo.Context) error {
 		ID:              uuid.NewString(),
 		Provider:        domain.ChatProviderTelegram,
 		ExternalEventID: externalID,
+		Message:         updateMessage(update),
 		ReceivedAt:      time.Now().UTC(),
 		Status:          "received",
 	}
@@ -99,6 +100,16 @@ func (a *Adapter) Webhook(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{
 		"result": "event processed",
 	})
+}
+
+func updateMessage(update Update) string {
+	if update.Message != nil {
+		return update.Message.Text
+	}
+	if update.CallbackQuery != nil {
+		return update.CallbackQuery.Data
+	}
+	return ""
 }
 
 func (a *Adapter) process(c echo.Context, update Update) error {

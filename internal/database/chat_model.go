@@ -50,6 +50,7 @@ type InboundEvent struct {
 	ID              uuid.UUID           `gorm:"type:uuid;primaryKey"`
 	Provider        domain.ChatProvider `gorm:"type:varchar(16);not null;index:idx_inbound_events_identity,unique,priority:1"`
 	ExternalEventID string              `gorm:"type:varchar(255);not null;index:idx_inbound_events_identity,unique,priority:2"`
+	Message         string              `gorm:"type:text"`
 	ReceivedAt      time.Time           `gorm:"not null"`
 	ProcessedAt     *time.Time          `gorm:""`
 	Status          string              `gorm:"type:varchar(16);not null;index"`

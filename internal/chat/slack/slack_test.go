@@ -71,6 +71,9 @@ func TestSlashCommandWebhookAcknowledgesAndDispatches(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("event was not marked processed")
 	}
+	if events.message != "/crypto-alert help" {
+		t.Fatalf("unexpected inbound message: %q", events.message)
+	}
 }
 
 func TestConfigurationBlocksUseSessionScopedValues(t *testing.T) {
@@ -145,10 +148,12 @@ func (*slackTransport) RoundTrip(request *http.Request) (*http.Response, error) 
 
 type fakeEvents struct {
 	claimed   bool
+	message   string
 	processed chan struct{}
 }
 
-func (f *fakeEvents) ClaimInboundEvent(context.Context, domain.InboundEvent) (bool, error) {
+func (f *fakeEvents) ClaimInboundEvent(_ context.Context, event domain.InboundEvent) (bool, error) {
+	f.message = event.Message
 	return f.claimed, nil
 }
 func (f *fakeEvents) MarkInboundEventProcessed(context.Context, domain.ChatProvider, string, time.Time) error {

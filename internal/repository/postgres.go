@@ -320,6 +320,7 @@ func (r *PostgresRepository) ClaimInboundEvent(ctx context.Context, event domain
 		ID:              id,
 		Provider:        event.Provider,
 		ExternalEventID: event.ExternalEventID,
+		Message:         event.Message,
 		ReceivedAt:      event.ReceivedAt,
 		Status:          event.Status,
 		ErrorMessage:    event.ErrorMessage,
