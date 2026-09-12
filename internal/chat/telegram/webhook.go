@@ -78,19 +78,27 @@ func (a *Adapter) Webhook(c echo.Context) error {
 	}
 	claimed, err := a.events.ClaimInboundEvent(c.Request().Context(), event)
 	if err != nil {
-		return c.NoContent(http.StatusInternalServerError)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
 	}
 	if !claimed {
-		return c.NoContent(http.StatusOK)
+		return c.JSON(http.StatusOK, map[string]string{
+			"result": "event recorded",
+		})
 	}
 	if err := a.process(c, update); err != nil {
 		_ = a.events.MarkInboundEventFailed(c.Request().Context(), domain.ChatProviderTelegram, externalID, err.Error())
-		return c.NoContent(http.StatusOK)
+		return c.JSON(http.StatusOK, map[string]string{
+			"result": "event failed",
+		})
 	}
 
 	_ = a.events.MarkInboundEventProcessed(c.Request().Context(), domain.ChatProviderTelegram, externalID, time.Now().UTC())
 
-	return c.NoContent(http.StatusOK)
+	return c.JSON(http.StatusOK, map[string]string{
+		"result": "event processed",
+	})
 }
 
 func (a *Adapter) process(c echo.Context, update Update) error {
