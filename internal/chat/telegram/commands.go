@@ -45,6 +45,9 @@ func parseCallback(data string) (string, string, error) {
 	return parts[1], parts[2], nil
 }
 
+// sample:
+//  crypto-alert:uuid:symbol:BTCUSDT
+//  crypto-alert:uuid:save
 func callbackData(sessionID, action string) string {
 	return "crypto-alert:" + sessionID + ":" + action
 }
