@@ -16,23 +16,13 @@ import (
 	"github.com/google/uuid"
 )
 
-// TargetRepository loads enabled destinations for each coordinator tick.
-type TargetRepository interface {
-	ListEnabledTargets(context.Context) ([]domain.AlertTarget, error)
-}
-
-// ConfigRepository loads the latest per-target configuration immediately before execution.
-type ConfigRepository interface {
-	GetAlertConfig(context.Context, string) (domain.AlertConfig, error)
-}
-
 // TargetExecutor runs independently configured alert jobs for each enabled target.
 type TargetExecutor struct {
 	periods   *PeriodEngine
 	market    market.MarketDataProvider
 	jobs      repository.JobRepository
-	targets   TargetRepository
-	configs   ConfigRepository
+	targets   repository.AlertTargetRepository
+	configs   repository.AlertConfigRepository
 	notifiers []notification.Notifier
 	legacy    *Executor
 	location  *time.Location
@@ -44,8 +34,8 @@ func NewTargetExecutor(
 	periods *PeriodEngine,
 	provider market.MarketDataProvider,
 	jobs repository.JobRepository,
-	targets TargetRepository,
-	configs ConfigRepository,
+	targets repository.AlertTargetRepository,
+	configs repository.AlertConfigRepository,
 	notifiers []notification.Notifier,
 	legacy *Executor,
 	location *time.Location,

@@ -239,7 +239,7 @@ func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *
 		if err != nil {
 			logger.Error("failed to register Telegram commands", "error", err)
 		} else {
-			logger.Info("Telegram chat webhook registered", "path", "/api/v1/chat/telegram/webhook")
+			logger.Info("Telegram chat commands registered")
 		}
 	}
 	if cfg.Chat.Enabled && cfg.Chat.Slack.Enabled {
