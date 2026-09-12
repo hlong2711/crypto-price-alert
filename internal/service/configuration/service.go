@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,6 +13,8 @@ import (
 type Service struct {
 	targets          repository.AlertTargetRepository
 	configs          repository.AlertConfigRepository
+	defaultSymbols   []string
+	defaultIntervals []domain.Interval
 	allowedSymbols   map[string]struct{}
 	allowedIntervals map[domain.Interval]struct{}
 	maxSymbols       int
@@ -47,6 +50,8 @@ func NewService(
 	return &Service{
 		targets:          targets,
 		configs:          configs,
+		defaultSymbols:   append([]string(nil), allowedSymbols...),
+		defaultIntervals: append([]domain.Interval(nil), allowedIntervals...),
 		allowedSymbols:   symbols,
 		allowedIntervals: intervals,
 		maxSymbols:       maxSymbols,
@@ -76,6 +81,26 @@ func (s *Service) GetTarget(ctx context.Context, provider domain.ChatProvider, t
 
 func (s *Service) GetConfig(ctx context.Context, targetID string) (domain.AlertConfig, error) {
 	return s.configs.GetAlertConfig(ctx, targetID)
+}
+
+// GetOrCreateConfig returns an existing configuration or creates a disabled
+// first-time configuration using the first allowed symbol and interval.
+func (s *Service) GetOrCreateConfig(ctx context.Context, targetID, updatedBy string) (domain.AlertConfig, error) {
+	config, err := s.GetConfig(ctx, targetID)
+	if err == nil {
+		return config, nil
+	}
+	if !errors.Is(err, repository.ErrAlertConfigNotFound) {
+		return domain.AlertConfig{}, err
+	}
+	if err := s.CreateConfig(ctx, targetID, []string{s.defaultSymbols[0]}, []domain.Interval{s.defaultIntervals[0]}, false, updatedBy); err != nil {
+		// Another concurrent configure request may have created it first.
+		if existing, getErr := s.GetConfig(ctx, targetID); getErr == nil {
+			return existing, nil
+		}
+		return domain.AlertConfig{}, err
+	}
+	return s.GetConfig(ctx, targetID)
 }
 
 func (s *Service) ReplaceConfig(

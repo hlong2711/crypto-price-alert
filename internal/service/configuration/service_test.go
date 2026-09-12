@@ -2,9 +2,11 @@ package configuration
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/repository"
 )
 
 type fakeTargetRepository struct{}
@@ -22,12 +24,23 @@ func (fakeTargetRepository) CountTargets(context.Context) (int64, error) { retur
 
 type fakeConfigRepository struct {
 	replaced domain.AlertConfig
+	created  domain.AlertConfig
+	missing  bool
 }
 
-func (f *fakeConfigRepository) CreateAlertConfig(context.Context, domain.AlertConfig) error {
+func (f *fakeConfigRepository) CreateAlertConfig(_ context.Context, config domain.AlertConfig) error {
+	f.created = config
 	return nil
 }
-func (f *fakeConfigRepository) GetAlertConfig(context.Context, string) (domain.AlertConfig, error) {
+
+func (f *fakeConfigRepository) GetAlertConfig(_ context.Context, targetID string) (domain.AlertConfig, error) {
+	if f.missing && f.created.TargetID == "" {
+		return domain.AlertConfig{}, errors.Join(repository.ErrAlertConfigNotFound, errors.New("missing"))
+	}
+	if f.created.TargetID != "" {
+		f.created.TargetID = targetID
+		return f.created, nil
+	}
 	return domain.AlertConfig{}, nil
 }
 func (f *fakeConfigRepository) ReplaceAlertConfig(_ context.Context, config domain.AlertConfig, expectedVersion int64) (domain.AlertConfig, error) {
@@ -77,5 +90,20 @@ func TestReplaceConfigRejectsInvalidValues(t *testing.T) {
 				t.Fatal("expected validation error")
 			}
 		})
+	}
+}
+
+func TestGetOrCreateConfigCreatesDisabledDefault(t *testing.T) {
+	configs := &fakeConfigRepository{missing: true}
+	service, err := NewService(fakeTargetRepository{}, configs, []string{"BTCUSDT", "ETHUSDT"}, []domain.Interval{domain.Interval1H, domain.Interval4H}, 2, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config, err := service.GetOrCreateConfig(context.Background(), "target", "creator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Enabled || config.TargetID != "target" || len(config.Symbols) != 1 || config.Symbols[0] != "BTCUSDT" || len(config.Intervals) != 1 || config.Intervals[0] != domain.Interval1H {
+		t.Fatalf("unexpected created config: %+v", config)
 	}
 }

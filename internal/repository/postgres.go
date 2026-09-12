@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -230,6 +231,9 @@ func (r *PostgresRepository) GetAlertConfig(ctx context.Context, targetID string
 	}
 	var config database.AlertConfig
 	if err := r.db.WithContext(ctx).Where("target_id = ?", parsedTargetID).First(&config).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return domain.AlertConfig{}, fmt.Errorf("%w: %s", ErrAlertConfigNotFound, targetID)
+		}
 		return domain.AlertConfig{}, err
 	}
 	var symbols []database.AlertConfigSymbol

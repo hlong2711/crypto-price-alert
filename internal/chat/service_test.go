@@ -16,6 +16,9 @@ type fakeConfigurationService struct {
 func (f *fakeConfigurationService) GetConfig(context.Context, string) (domain.AlertConfig, error) {
 	return f.config, nil
 }
+func (f *fakeConfigurationService) GetOrCreateConfig(context.Context, string, string) (domain.AlertConfig, error) {
+	return f.config, nil
+}
 func (f *fakeConfigurationService) ReplaceConfig(_ context.Context, targetID string, symbols []string, intervals []domain.Interval, enabled bool, updatedBy string, expectedVersion int64) (domain.AlertConfig, error) {
 	if f.config.Version != expectedVersion {
 		return domain.AlertConfig{}, context.DeadlineExceeded
