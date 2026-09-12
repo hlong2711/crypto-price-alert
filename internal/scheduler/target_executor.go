@@ -70,6 +70,11 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 			return nil
 		}
 		return e.legacy.Execute(ctx, now, interval)
+	} else {
+		// TODO: REMOVE when all commands work: tmp run legacy exec for legacy group.
+		go func() {
+			e.legacy.Execute(ctx, now, interval)
+		}()
 	}
 
 	period, due := e.periods.GetCurrentPeriod(now, interval)
