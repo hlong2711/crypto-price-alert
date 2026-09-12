@@ -2,11 +2,13 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/repository"
 	"crypto-price-alert/internal/service/configuration"
 )
 
@@ -56,6 +58,9 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 
 	case ActionShow:
 		config, err := s.configuration.GetConfig(ctx, command.Target.ID)
+		if errors.Is(err, repository.ErrAlertConfigNotFound) {
+			return "Not found alert config", nil
+		}
 		if err != nil {
 			return "", err
 		}
