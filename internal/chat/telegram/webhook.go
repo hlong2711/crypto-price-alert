@@ -73,24 +73,43 @@ func (a *Adapter) Webhook(c echo.Context) error {
 		ID:              uuid.NewString(),
 		Provider:        domain.ChatProviderTelegram,
 		ExternalEventID: externalID,
+		Message:         updateMessage(update),
 		ReceivedAt:      time.Now().UTC(),
 		Status:          "received",
 	}
 	claimed, err := a.events.ClaimInboundEvent(c.Request().Context(), event)
 	if err != nil {
-		return c.NoContent(http.StatusInternalServerError)
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": err.Error(),
+		})
 	}
 	if !claimed {
-		return c.NoContent(http.StatusOK)
+		return c.JSON(http.StatusOK, map[string]string{
+			"result": "event recorded",
+		})
 	}
 	if err := a.process(c, update); err != nil {
 		_ = a.events.MarkInboundEventFailed(c.Request().Context(), domain.ChatProviderTelegram, externalID, err.Error())
-		return c.NoContent(http.StatusOK)
+		return c.JSON(http.StatusOK, map[string]string{
+			"result": "event failed",
+		})
 	}
 
 	_ = a.events.MarkInboundEventProcessed(c.Request().Context(), domain.ChatProviderTelegram, externalID, time.Now().UTC())
 
-	return c.NoContent(http.StatusOK)
+	return c.JSON(http.StatusOK, map[string]string{
+		"result": "event processed",
+	})
+}
+
+func updateMessage(update Update) string {
+	if update.Message != nil {
+		return update.Message.Text
+	}
+	if update.CallbackQuery != nil {
+		return update.CallbackQuery.Data
+	}
+	return ""
 }
 
 func (a *Adapter) process(c echo.Context, update Update) error {
@@ -118,6 +137,7 @@ func (a *Adapter) process(c echo.Context, update Update) error {
 				EventID:     fmt.Sprintf("%d", update.UpdateID),
 			})
 		if err != nil {
+			c.Logger().Errorf("Processing error %v", err)
 			return a.client.SendMessage(ctx, update.Message.Chat.ID, safeError(err), nil)
 		}
 

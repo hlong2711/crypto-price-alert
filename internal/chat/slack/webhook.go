@@ -104,7 +104,7 @@ func (a *Adapter) SlashCommandWebhook(c echo.Context) error {
 	if payload.TriggerID == "" {
 		payload.TriggerID = uuid.NewString()
 	}
-	if err := a.claimAndProcess(c.Request().Context(), payload.TriggerID, func(ctx context.Context) error { return a.processSlash(ctx, payload) }); err != nil {
+	if err := a.claimAndProcess(c.Request().Context(), payload.TriggerID, slashMessage(payload), func(ctx context.Context) error { return a.processSlash(ctx, payload) }); err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	return c.JSON(http.StatusOK, Response{})
@@ -133,17 +133,18 @@ func (a *Adapter) InteractionWebhook(c echo.Context) error {
 	if eventID == "" {
 		eventID = uuid.NewString()
 	}
-	if err := a.claimAndProcess(c.Request().Context(), eventID, func(ctx context.Context) error { return a.processInteraction(ctx, payload) }); err != nil {
+	if err := a.claimAndProcess(c.Request().Context(), eventID, interactionMessage(payload), func(ctx context.Context) error { return a.processInteraction(ctx, payload) }); err != nil {
 		return c.NoContent(http.StatusInternalServerError)
 	}
 	return c.JSON(http.StatusOK, Response{})
 }
 
-func (a *Adapter) claimAndProcess(ctx context.Context, externalID string, process func(context.Context) error) error {
+func (a *Adapter) claimAndProcess(ctx context.Context, externalID, message string, process func(context.Context) error) error {
 	event := domain.InboundEvent{
 		ID:              uuid.NewString(),
 		Provider:        domain.ChatProviderSlack,
 		ExternalEventID: externalID,
+		Message:         message,
 		ReceivedAt:      a.now().UTC(),
 		Status:          "received",
 	}
@@ -160,6 +161,21 @@ func (a *Adapter) claimAndProcess(ctx context.Context, externalID string, proces
 		_ = a.events.MarkInboundEventProcessed(background, domain.ChatProviderSlack, externalID, a.now().UTC())
 	}()
 	return nil
+}
+
+func slashMessage(payload SlashCommand) string {
+	message := strings.TrimSpace(payload.Command)
+	if payload.Text != "" {
+		message += " " + strings.TrimSpace(payload.Text)
+	}
+	return strings.TrimSpace(message)
+}
+
+func interactionMessage(payload Interaction) string {
+	if len(payload.Actions) == 0 {
+		return ""
+	}
+	return payload.Actions[0].Value
 }
 
 func (a *Adapter) processSlash(ctx context.Context, payload SlashCommand) error {

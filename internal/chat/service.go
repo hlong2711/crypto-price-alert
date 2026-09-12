@@ -2,17 +2,20 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/repository"
 	"crypto-price-alert/internal/service/configuration"
 )
 
 // ConfigurationService exposes the configuration operations required by chat commands.
 type ConfigurationService interface {
 	GetConfig(context.Context, string) (domain.AlertConfig, error)
+	GetOrCreateConfig(context.Context, string, string) (domain.AlertConfig, error)
 	ReplaceConfig(context.Context, string, []string, []domain.Interval, bool, string, int64) (domain.AlertConfig, error)
 	Enable(context.Context, string, string, int64) (domain.AlertConfig, error)
 	Pause(context.Context, string, string, int64) (domain.AlertConfig, error)
@@ -55,13 +58,16 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 
 	case ActionShow:
 		config, err := s.configuration.GetConfig(ctx, command.Target.ID)
+		if errors.Is(err, repository.ErrAlertConfigNotFound) {
+			return "Not found alert config", nil
+		}
 		if err != nil {
 			return "", err
 		}
 		return fmt.Sprintf("enabled=%t symbols=%s intervals=%s version=%d", config.Enabled, strings.Join(config.Symbols, ","), joinIntervals(config.Intervals), config.Version), nil
 
 	case ActionConfigure:
-		config, err := s.configuration.GetConfig(ctx, command.Target.ID)
+		config, err := s.configuration.GetOrCreateConfig(ctx, command.Target.ID, command.ActorUserID)
 		if err != nil {
 			return "", err
 		}

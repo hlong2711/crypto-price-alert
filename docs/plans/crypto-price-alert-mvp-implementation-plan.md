@@ -139,11 +139,7 @@ Implement:
 CalculateChange(open, close float64) (float64, error)
 ```
 
-Use:
-
-```text
-(close - open) / open * 100
-```
+- Refer function in service/alert.go
 
 Reject non-positive or invalid opening prices. Keep full precision in the domain and round only during message formatting.
 

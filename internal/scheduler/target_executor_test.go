@@ -78,7 +78,31 @@ func (r targetRepo) ListEnabledTargets(context.Context) ([]domain.AlertTarget, e
 	return r.values, nil
 }
 
+func (r targetRepo) FindOrCreateTarget(ctx context.Context, target domain.AlertTarget) (domain.AlertTarget, error) {
+	panic("not implemented") // TODO: Implement
+}
+
+func (r targetRepo) GetTarget(ctx context.Context, provider domain.ChatProvider, tenantID string, externalChatID string) (domain.AlertTarget, error) {
+	panic("not implemented") // TODO: Implement
+}
+
+func (r targetRepo) CountTargets(ctx context.Context) (int64, error) {
+	panic("not implemented") // TODO: Implement
+}
+
 type configRepo struct{ values map[string]domain.AlertConfig }
+
+func (r configRepo) CreateAlertConfig(ctx context.Context, config domain.AlertConfig) error {
+	panic("not implemented") // TODO: Implement
+}
+
+func (r configRepo) ReplaceAlertConfig(ctx context.Context, config domain.AlertConfig, expectedVersion int64) (domain.AlertConfig, error) {
+	panic("not implemented") // TODO: Implement
+}
+
+func (r configRepo) SetAlertConfigEnabled(ctx context.Context, targetID string, enabled bool, updatedBy string, expectedVersion int64) (domain.AlertConfig, error) {
+	panic("not implemented") // TODO: Implement
+}
 
 func (r configRepo) GetAlertConfig(_ context.Context, targetID string) (domain.AlertConfig, error) {
 	value, ok := r.values[targetID]

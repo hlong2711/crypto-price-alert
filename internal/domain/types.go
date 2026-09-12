@@ -177,6 +177,7 @@ type InboundEvent struct {
 	ID              string
 	Provider        ChatProvider
 	ExternalEventID string
+	Message         string
 	ReceivedAt      time.Time
 	ProcessedAt     *time.Time
 	Status          string

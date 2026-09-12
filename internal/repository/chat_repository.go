@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"crypto-price-alert/internal/database"
@@ -10,6 +11,10 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+// ErrAlertConfigNotFound distinguishes a missing first-time configuration from
+// other database failures.
+var ErrAlertConfigNotFound = errors.New("alert config not found")
 
 type AlertTargetRepository interface {
 	FindOrCreateTarget(ctx context.Context, target domain.AlertTarget) (domain.AlertTarget, error)
