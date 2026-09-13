@@ -97,7 +97,10 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 		return fmt.Sprintf("enabled=%t version=%d", updated.Enabled, updated.Version), nil
 
 	case ActionSave:
-		return "", s.saveSession(ctx, command)
+		if err := s.saveSession(ctx, command); err != nil {
+			return  "", err
+		}
+		return "Saved config", nil
 
 	case ActionCancel:
 		if len(command.Arguments) != 1 {
