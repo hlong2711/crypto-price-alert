@@ -196,3 +196,32 @@ func TestWebhookRejectsSecretAndDuplicate(t *testing.T) {
 		t.Fatalf("expected duplicate acknowledgment, got %d", recorder.Code)
 	}
 }
+
+func TestWebhookIgnoresMessagesWithoutCommandPrefix(t *testing.T) {
+	events := &fakeEvents{}
+	commands := &fakeCommands{}
+	adapter := newAdapter(t, &http.Client{}, events, commands)
+	e := echo.New()
+	payload, _ := json.Marshal(Update{
+		UpdateID: 43,
+		Message: &Message{
+			From: &User{ID: 7},
+			Chat: Chat{ID: 9, Type: "group"},
+			Text: "please configure alerts",
+		},
+	})
+	request := httptest.NewRequest(http.MethodPost, "/telegram", strings.NewReader(string(payload)))
+	request.Header.Set("X-Telegram-Bot-Api-Secret-Token", "secret")
+	recorder := httptest.NewRecorder()
+	ctx := e.NewContext(request, recorder)
+
+	if err := adapter.Webhook(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected ignored message acknowledgment, got %d", recorder.Code)
+	}
+	if events.claimed || events.processed || events.failed {
+		t.Fatalf("non-command message should not enter inbound event processing: %+v", events)
+	}
+}

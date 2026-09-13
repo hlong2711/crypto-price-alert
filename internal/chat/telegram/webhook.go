@@ -68,6 +68,11 @@ func (a *Adapter) Webhook(c echo.Context) error {
 	if err := json.Unmarshal(body, &update); err != nil || update.UpdateID == 0 {
 		return c.NoContent(http.StatusBadRequest)
 	}
+	if update.Message != nil && !strings.HasPrefix(update.Message.Text, "/") {
+		return c.JSON(http.StatusOK, map[string]string{
+			"result": "message ignored",
+		})
+	}
 	externalID := fmt.Sprintf("%d", update.UpdateID)
 	event := domain.InboundEvent{
 		ID:              uuid.NewString(),
