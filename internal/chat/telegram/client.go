@@ -64,8 +64,8 @@ func (c *APIClient) SendMessage(ctx context.Context, chatID int64, text string, 
 	return c.call(ctx, "sendMessage", payload, nil)
 }
 
-func (c *APIClient) AnswerCallbackQuery(ctx context.Context, callbackID string) error {
-	return c.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": callbackID}, nil)
+func (c *APIClient) AnswerCallbackQuery(ctx context.Context, callbackID string, text string) error {
+	return c.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": callbackID, text: text}, nil)
 }
 
 func (c *APIClient) call(ctx context.Context, method string, payload any, result any) error {

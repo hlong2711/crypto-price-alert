@@ -200,6 +200,8 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 	if err != nil || session.TargetID != target.ID {
 		return fmt.Errorf("invalid configuration session")
 	}
+
+	var resp string = ""
 	switch {
 	case strings.HasPrefix(action, "symbol:"):
 		session.SelectedSymbols = toggleString(session.SelectedSymbols, strings.TrimPrefix(action, "symbol:"))
@@ -215,20 +217,20 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 		}
 
 	case action == "save":
-		if _, err := a.commands.Handle(ctx, command); err != nil {
+		if resp, err = a.commands.Handle(ctx, command); err != nil {
 			return err
 		}
 
 	case action == "cancel":
 		command.Action = chat.ActionCancel
-		if _, err := a.commands.Handle(ctx, command); err != nil {
+		if resp, err = a.commands.Handle(ctx, command); err != nil {
 			return err
 		}
 
 	default:
 		return fmt.Errorf("unsupported callback action")
 	}
-	return a.client.AnswerCallbackQuery(ctx, callback.ID)
+	return a.client.AnswerCallbackQuery(ctx, callback.ID, resp)
 }
 
 func (a *Adapter) targetForChat(ctx context.Context, telegramChat Chat) (domain.AlertTarget, error) {
