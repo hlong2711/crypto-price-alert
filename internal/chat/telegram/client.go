@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -15,6 +17,7 @@ type APIClient struct {
 	token      string
 	baseURL    string
 	httpClient *http.Client
+	logger     *slog.Logger
 }
 
 func NewAPIClient(token, baseURL string, httpClient *http.Client) (*APIClient, error) {
@@ -27,7 +30,13 @@ func NewAPIClient(token, baseURL string, httpClient *http.Client) (*APIClient, e
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
 	}
-	return &APIClient{token: token, baseURL: strings.TrimRight(baseURL, "/"), httpClient: httpClient}, nil
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	return &APIClient{
+		token:      token,
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		httpClient: httpClient,
+		logger:     logger,
+	}, nil
 }
 
 func (c *APIClient) GetChatAdministrators(ctx context.Context, chatID int64) ([]ChatMember, error) {
@@ -65,7 +74,12 @@ func (c *APIClient) SendMessage(ctx context.Context, chatID int64, text string, 
 }
 
 func (c *APIClient) AnswerCallbackQuery(ctx context.Context, callbackID string, text string) error {
-	return c.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": callbackID, text: text}, nil)
+	c.logger.Info("Telegram client answer callback", "callbackId", callbackID, "text", text)
+	return c.call(ctx, "answerCallbackQuery", map[string]any{
+		"callback_query_id": callbackID,
+		"text":              text,
+		"show_alert":        true,
+	}, nil)
 }
 
 func (c *APIClient) call(ctx context.Context, method string, payload any, result any) error {
