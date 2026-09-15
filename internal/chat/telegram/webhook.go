@@ -220,16 +220,19 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 		if resp, err = a.commands.Handle(ctx, command); err != nil {
 			return err
 		}
+		return a.client.SendMessage(ctx, callback.Message.Chat.ID, resp, nil)
 
 	case action == "cancel":
 		command.Action = chat.ActionCancel
 		if resp, err = a.commands.Handle(ctx, command); err != nil {
 			return err
 		}
+		return a.client.SendMessage(ctx, callback.Message.Chat.ID, resp, nil)
 
 	default:
 		return fmt.Errorf("unsupported callback action")
 	}
+
 	return a.client.AnswerCallbackQuery(ctx, callback.ID, resp)
 }
 
