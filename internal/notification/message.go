@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"crypto-price-alert/internal/domain"
 )
@@ -30,27 +31,25 @@ func BuildMessage(period domain.Period, results []PriceResult, location *time.Lo
 		return results[i].Change.Symbol < results[j].Change.Symbol
 	})
 
-	lines := make([]string, 0, len(results))
+	rows := make([][]string, 0, len(results))
 	for _, result := range results {
 		if result.Change.Symbol == "" {
 			return domain.Message{}, fmt.Errorf("message symbol is required")
 		}
 		if result.Unavailable {
-			lines = append(lines, fmt.Sprintf("%s   unavailable ⚠️", result.Change.Symbol))
+			rows = append(rows, []string{result.Change.Symbol, "-", "unavailable ⚠️", "-"})
 			continue
 		}
 		icon := "🟢"
 		if result.Change.ChangePct < 0 {
 			icon = "🔴"
 		}
-		lines = append(lines, fmt.Sprintf(
-			"%-8s $%s %+.2f%% %s Vol: %s",
+		rows = append(rows, []string{
 			result.Change.Symbol,
-			formatPrice(result.Change.Close),
-			result.Change.ChangePct,
-			icon,
+			"$" + formatPrice(result.Change.Close),
+			fmt.Sprintf("%+.2f%% %s", result.Change.ChangePct, icon),
 			formatVolume(result.Change.Volume),
-		))
+		})
 	}
 
 	title := fmt.Sprintf("📊 Crypto %s Update", period.Interval)
@@ -63,7 +62,7 @@ func BuildMessage(period domain.Period, results []PriceResult, location *time.Lo
 	return domain.Message{
 		Title:  title,
 		Period: period,
-		Lines:  append([]string{periodText}, lines...)}, nil
+		Lines:  append([]string{periodText, ""}, formatTable(rows)...)}, nil
 }
 
 func RenderMessage(message domain.Message) string {
@@ -84,4 +83,44 @@ func formatVolume(value float64) string {
 	formatted := strconv.FormatFloat(value, 'f', 5, 64)
 	formatted = strings.TrimRight(formatted, "0")
 	return strings.TrimRight(formatted, ".")
+}
+
+func formatTable(rows [][]string) []string {
+	headers := []string{"Symbol", "Price", "Change", "Volume"}
+	widths := make([]int, len(headers))
+	for i, header := range headers {
+		widths[i] = utf8.RuneCountInString(header)
+	}
+	for _, row := range rows {
+		for i, cell := range row {
+			if width := utf8.RuneCountInString(cell); width > widths[i] {
+				widths[i] = width
+			}
+		}
+	}
+
+	lines := []string{
+		formatTableRow(headers, widths),
+		formatTableSeparator(widths),
+	}
+	for _, row := range rows {
+		lines = append(lines, formatTableRow(row, widths))
+	}
+	return lines
+}
+
+func formatTableRow(cells []string, widths []int) string {
+	padded := make([]string, len(cells))
+	for i, cell := range cells {
+		padded[i] = cell + strings.Repeat(" ", widths[i]-utf8.RuneCountInString(cell))
+	}
+	return strings.Join(padded, "  ")
+}
+
+func formatTableSeparator(widths []int) string {
+	parts := make([]string, len(widths))
+	for i, width := range widths {
+		parts[i] = strings.Repeat("-", width)
+	}
+	return strings.Join(parts, "  ")
 }

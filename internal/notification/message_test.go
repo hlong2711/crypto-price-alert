@@ -23,7 +23,14 @@ func TestBuildMessageAggregatesAndFormats(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := RenderMessage(message)
-	for _, expected := range []string{"📊 Crypto 1h Update", "09:00 → 10:00 Asia/Ho_Chi_Minh", "BTCUSDT", "$108420.00", "+1.82% 🟢", "Vol: 148976.11428", "SOLUSDT", "-2.13% 🔴", "Vol: 52340.25"} {
+	for _, expected := range []string{
+		"📊 Crypto 1h Update",
+		"09:00 → 10:00 Asia/Ho_Chi_Minh",
+		"Symbol   Price       Change    Volume",
+		"-------  ----------  --------  ------------",
+		"BTCUSDT  $108420.00  +1.82% 🟢  148976.11428",
+		"SOLUSDT  $198.3200   -2.13% 🔴  52340.25",
+	} {
 		if !strings.Contains(rendered, expected) {
 			t.Fatalf("message missing %q: %s", expected, rendered)
 		}
@@ -42,7 +49,7 @@ func TestBuildMessageIncludesUnavailableSymbol(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(RenderMessage(message), "ETHUSDT   unavailable ⚠️") {
+	if !strings.Contains(RenderMessage(message), "ETHUSDT  -      unavailable ⚠️  -") {
 		t.Fatal("expected unavailable symbol")
 	}
 }
