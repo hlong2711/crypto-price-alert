@@ -147,10 +147,16 @@ func (a *Adapter) process(c echo.Context, update Update) error {
 		}
 
 		var keyboard *InlineKeyboardMarkup
+		text := response
 		if action == chat.ActionConfigure {
-			keyboard = a.configurationKeyboard(response)
+			session, err := a.sessions.Get(ctx, response)
+			if err != nil {
+				return err
+			}
+			text = symbolSelectionText(session)
+			keyboard = a.symbolKeyboard(session)
 		}
-		return a.client.SendMessage(ctx, update.Message.Chat.ID, response, keyboard)
+		return a.client.SendMessage(ctx, update.Message.Chat.ID, text, keyboard)
 	}
 
 	if update.CallbackQuery != nil {
@@ -197,7 +203,7 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 		Arguments:   []string{sessionID},
 	}
 	session, err := a.sessions.Get(ctx, sessionID)
-	if err != nil || session.TargetID != target.ID {
+	if err != nil || session.TargetID != target.ID || session.ActorUserID != userIDString(callback.From.ID) {
 		return fmt.Errorf("invalid configuration session")
 	}
 
@@ -208,11 +214,27 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 		if err := a.commands.UpdateSession(ctx, command, session.SelectedSymbols, session.SelectedIntervals); err != nil {
 			return err
 		}
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, symbolSelectionText(session), a.symbolKeyboard(session)); err != nil {
+			return err
+		}
 
 	case strings.HasPrefix(action, "interval:"):
 		value := domain.Interval(strings.TrimPrefix(action, "interval:"))
 		session.SelectedIntervals = toggleInterval(session.SelectedIntervals, value)
 		if err := a.commands.UpdateSession(ctx, command, session.SelectedSymbols, session.SelectedIntervals); err != nil {
+			return err
+		}
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, intervalSelectionText(session), a.intervalKeyboard(session)); err != nil {
+			return err
+		}
+
+	case action == "next:intervals":
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, intervalSelectionText(session), a.intervalKeyboard(session)); err != nil {
+			return err
+		}
+
+	case action == "back:symbols":
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, symbolSelectionText(session), a.symbolKeyboard(session)); err != nil {
 			return err
 		}
 
@@ -265,28 +287,95 @@ func (a *Adapter) targetForChat(ctx context.Context, telegramChat Chat) (domain.
 	})
 }
 
-func (a *Adapter) configurationKeyboard(sessionID string) *InlineKeyboardMarkup {
+func (a *Adapter) symbolKeyboard(session chat.ConfigSession) *InlineKeyboardMarkup {
 	keyboard := &InlineKeyboardMarkup{}
 
 	for _, symbol := range a.allowedSymbols {
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
-			Text:         symbol,
-			CallbackData: callbackData(sessionID, "symbol:"+symbol),
-		}})
-	}
-	for _, interval := range a.allowedIntervals {
-		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
-			Text:         string(interval),
-			CallbackData: callbackData(sessionID, "interval:"+string(interval)),
+			Text:         selectedText(containsString(session.SelectedSymbols, symbol), symbol),
+			CallbackData: callbackData(session.SessionID, "symbol:"+symbol),
 		}})
 	}
 	keyboard.InlineKeyboard = append(
 		keyboard.InlineKeyboard,
 		[]InlineKeyboardButton{
-			{Text: "Save", CallbackData: callbackData(sessionID, "save")},
-			{Text: "Cancel", CallbackData: callbackData(sessionID, "cancel")}},
+			{Text: "Next", CallbackData: callbackData(session.SessionID, "next:intervals")},
+			{Text: "Cancel", CallbackData: callbackData(session.SessionID, "cancel")},
+		},
 	)
 	return keyboard
+}
+
+func (a *Adapter) intervalKeyboard(session chat.ConfigSession) *InlineKeyboardMarkup {
+	keyboard := &InlineKeyboardMarkup{}
+
+	for _, interval := range a.allowedIntervals {
+		value := string(interval)
+		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
+			Text:         selectedText(containsInterval(session.SelectedIntervals, interval), value),
+			CallbackData: callbackData(session.SessionID, "interval:"+value),
+		}})
+	}
+	keyboard.InlineKeyboard = append(
+		keyboard.InlineKeyboard,
+		[]InlineKeyboardButton{
+			{Text: "Back", CallbackData: callbackData(session.SessionID, "back:symbols")},
+			{Text: "Save", CallbackData: callbackData(session.SessionID, "save")},
+			{Text: "Cancel", CallbackData: callbackData(session.SessionID, "cancel")},
+		},
+	)
+	return keyboard
+}
+
+func symbolSelectionText(session chat.ConfigSession) string {
+	return fmt.Sprintf("Select symbols for alerts.\nSelected: %s", joinSelectedStrings(session.SelectedSymbols))
+}
+
+func intervalSelectionText(session chat.ConfigSession) string {
+	return fmt.Sprintf("Select intervals for alerts.\nSelected: %s", joinSelectedIntervals(session.SelectedIntervals))
+}
+
+func selectedText(selected bool, text string) string {
+	if selected {
+		return "✓ " + text
+	}
+	return text
+}
+
+func containsString(values []string, value string) bool {
+	for _, current := range values {
+		if current == value {
+			return true
+		}
+	}
+	return false
+}
+
+func containsInterval(values []domain.Interval, value domain.Interval) bool {
+	for _, current := range values {
+		if current == value {
+			return true
+		}
+	}
+	return false
+}
+
+func joinSelectedStrings(values []string) string {
+	if len(values) == 0 {
+		return "none"
+	}
+	return strings.Join(values, ", ")
+}
+
+func joinSelectedIntervals(values []domain.Interval) string {
+	if len(values) == 0 {
+		return "none"
+	}
+	parts := make([]string, 0, len(values))
+	for _, value := range values {
+		parts = append(parts, string(value))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func toggleString(values []string, value string) []string {

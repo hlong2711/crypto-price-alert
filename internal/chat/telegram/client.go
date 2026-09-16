@@ -73,12 +73,20 @@ func (c *APIClient) SendMessage(ctx context.Context, chatID int64, text string, 
 	return c.call(ctx, "sendMessage", payload, nil)
 }
 
+func (c *APIClient) EditMessageText(ctx context.Context, chatID int64, messageID int64, text string, keyboard *InlineKeyboardMarkup) error {
+	payload := map[string]any{"chat_id": chatID, "message_id": messageID, "text": text}
+	if keyboard != nil {
+		payload["reply_markup"] = keyboard
+	}
+	return c.call(ctx, "editMessageText", payload, nil)
+}
+
 func (c *APIClient) AnswerCallbackQuery(ctx context.Context, callbackID string, text string) error {
 	c.logger.Info("Telegram client answer callback", "callbackId", callbackID, "text", text)
 	return c.call(ctx, "answerCallbackQuery", map[string]any{
 		"callback_query_id": callbackID,
 		"text":              text,
-		"show_alert":        true,
+		"show_alert":        strings.TrimSpace(text) != "",
 	}, nil)
 }
 

@@ -98,7 +98,7 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 
 	case ActionSave:
 		if err := s.saveSession(ctx, command); err != nil {
-			return  "", err
+			return "", err
 		}
 		return "Saved config", nil
 
