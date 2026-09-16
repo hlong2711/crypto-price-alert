@@ -70,30 +70,61 @@ Concurrency/rate note:
   scoped to one `Execute()` call only. A TTL cache across 1h/4h overlaps is
   explicitly out of scope (staleness risk).
 
-## File-Level Changes (not yet executed)
+## Implementation Steps (ordered todo list — follow top-down to avoid conflicts)
 
-1. `internal/scheduler/target_executor.go`
-   - Split `Execute` into `collectEligible()`, `fetchUniqueSymbols()`,
-     `deliverToTarget()` helpers (or inline phases).
-   - Replace `executeTarget()` per-symbol fetch with shared-map lookup; keep its job
-     create/skip/send/mark logic.
-   - Remove legacy run: delete the `else { go func() { legacy.Execute() }() }`
-     dual-run block (`:74-80`).
-   - Open assumption: also delete the `if len(targets)==0 { return legacy.Execute() }`
-     fallback so `TargetExecutor` never calls legacy (zero targets = no-op). If the
-     legacy global channel is still needed, keep the zero-target fallback only —
-     confirm during review. Follow-up cleanup (removing the `legacy` field/ctor
-     param) deferred.
-2. `internal/scheduler/target_executor_test.go` (+ maybe `executor_test.go`)
-   - Counting `fakeMarket` (`mu + map[string]int`).
-   - New tests: 3 targets x same `BTCUSDT` -> 1 `GetKline`, 3 deliveries, 3 sent jobs;
-     mixed symbols (`A:{BTC,ETH}`, `B:{ETH,SOL}`) -> unique-count calls with correct
-     per-target messages; one symbol failing -> all sharers `Unavailable` but round
-     still delivers; duplicate tick -> 0 new calls, 0 new deliveries; fully-sent
-     target skipped while fresh target still triggers fetch.
-3. Deferred / out of scope: legacy `Executor` path (single symbol list, already
-   1/symbol); `AlertService.Run/RunForTarget` batch sharing; cross-round TTL cache;
-   new config flags.
+> Rule: finish + verify each step before starting the next. Steps are scoped to
+> non-overlapping code regions except where noted; Step 3 is the single behavior
+> change and must be applied atomically.
+
+- [ ] Step 0 — Baseline (no code change)
+  - Files: none.
+  - Run: `go test ./internal/scheduler/... -count=1 -v` and `go build ./...`; record green baseline.
+
+- [ ] Step 1 — REMOVE legacy run from `TargetExecutor.Execute` (isolated delete)
+  - File MODIFY: `internal/scheduler/target_executor.go:68-80`.
+  - REMOVE: the `if len(targets) == 0 { ... legacy.Execute ... } else { // TODO: REMOVE ... go func() { legacy.Execute }() }` block.
+  - ADD: `if len(targets) == 0 { return nil }` (zero targets = no-op).
+  - Do NOT touch: struct field `legacy`, ctor `NewTargetExecutor` signature, `cmd/server/main.go` call sites (keeps this step conflict-free; field cleanup is deferred).
+  - Done when: `grep -n "legacy.Execute" internal/scheduler/target_executor.go` returns nothing; `go build ./...` passes.
+
+- [ ] Step 2 — ADD shared-fetch scaffolding (purely additive, no behavior change)
+  - File MODIFY (append-only): `internal/scheduler/target_executor.go` (bottom, near `containsInterval`).
+  - ADD types only, nothing calls them yet:
+    - `eligibleTarget{target domain.AlertTarget, config domain.AlertConfig}`
+    - `pendingJob{job domain.Job, symbol string}`
+    - `fetchOutcome{result notification.PriceResult}` (Unavailable encoded as today via `notification.PriceResult{Change: ..., Unavailable: true}`).
+  - Done when: `go build ./...` + `go vet ./internal/scheduler/` pass; `Execute` behavior byte-identical.
+
+- [ ] Step 3 — MODIFY `Execute` to collect → fetch-once → deliver (the behavior change; atomic)
+  - File MODIFY: `internal/scheduler/target_executor.go:59-103` (`Execute`) and `:105-175` (`executeTarget`).
+  - MODIFY `Execute`: keep `mu.TryLock`, `ListEnabledTargets`, `GetCurrentPeriod` as-is; REPLACE the per-target `GetAlertConfig` + `executeTarget` loop with:
+    1. collect `eligible` list (same skip rules: config-load error -> record `firstErr`, continue; `!Enabled`/interval mismatch -> skip);
+    2. Phase 1 job pre-pass: per eligible x per `config.Symbols` call `CreateIfNotExists`; on error record `firstErr` and drop that target; `!isNew && sent` -> exclude from send set; else add symbol to `neededSet` + stash job handle per target. If `neededSet` empty -> return `firstErr` (0 Binance calls);
+    3. Phase 2 shared fetch: `sort` `neededSet`, then sequential `GetKline` + `CalculateChange` once per symbol into `outcomes` map (fetch/validation error -> shared `Unavailable` outcome; same `service.CalculateChange` call as today);
+    4. Phase 3 deliver: per eligible target in original order, assemble items from stashed unsent jobs + `outcomes[symbol]`, skip if empty, then existing `BuildMessage` -> `SendToTarget` per notifier -> `MarkSent`/`MarkFailed` block unchanged.
+  - MODIFY `executeTarget`: change signature to accept the shared map (e.g. `executeTargetWithShared(ctx, target, config, period, jobs []domain.Job, outcomes map[string]fetchOutcome)`) and REMOVE its internal `GetKline`/`CalculateChange` calls, replacing them with map lookups. Alternatively inline it into `Execute`; either way the old per-symbol fetch loop (`:128-144`) is REMOVED.
+  - Do NOT touch in this step: test files, `Executor`, `AlertService`, provider, repository.
+  - Done when: `go test ./internal/scheduler/... -count=1 -v` passes (old tests; new sharing tests come in Step 4).
+
+- [ ] Step 4 — MODIFY test harness + ADD sharing tests (test-only step)
+  - File MODIFY: `internal/scheduler/target_executor_test.go:115-119` (`fakeMarket`).
+  - MODIFY `fakeMarket`: ADD `mu sync.Mutex` + `calls map[string]int` (+ `fail map[string]error` for the error case); `GetKline` records `calls[symbol]++` and returns injected error when set. Existing tests keep passing (they ignore counts; value receiver -> switch to pointer receiver + update `NewTargetExecutor(..., &fakeMarket{...} or newCountingMarket())` call sites `:33,63` accordingly in the same edit to avoid a half-broken state).
+  - ADD tests (same file, no changes to production code):
+    1. 3 targets x same `BTCUSDT` -> `calls["BTCUSDT"] == 1`, 3 deliveries, 3 sent jobs;
+    2. mixed `A:{BTC,ETH}`, `B:{ETH,SOL}` -> 3 total calls, correct per-target messages;
+    3. failing symbol -> all sharers `Unavailable`, round still delivers;
+    4. duplicate tick -> 0 new calls, 0 new deliveries;
+    5. fully-sent target skipped while fresh target still triggers fetch.
+  - Done when: `go test ./internal/scheduler/... -count=1 -v` passes including the 5 new tests.
+
+- [ ] Step 5 — Full verification (no code change)
+  - Run: `go test ./... -count=1`, `go vet ./...`, `go build ./...`.
+  - Done when: all green; expected effect spot-checked via Step 4 counters (N targets x M shared symbols -> M Binance calls).
+
+## Deferred / Explicitly Out Of Scope
+
+- Removing the now-unused `legacy *Executor` field + ctor param + `cmd/server/main.go` wiring (deferred cleanup; Step 1 keeps them to avoid cross-file conflicts).
+- Legacy `Executor` path, `AlertService.Run/RunForTarget` sharing, cross-round TTL cache, new config flags.
 
 ## Verification
 
