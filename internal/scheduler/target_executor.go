@@ -70,13 +70,6 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 			return nil
 		}
 		return e.legacy.Execute(ctx, now, interval)
-	} else {
-		// TODO: REMOVE when all commands work: tmp run legacy exec for legacy group.
-		if e.legacy != nil {
-			go func() {
-				_ = e.legacy.Execute(ctx, now, interval)
-			}()
-		}
 	}
 
 	period, due := e.periods.GetCurrentPeriod(now, interval)
@@ -84,6 +77,7 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 		return nil
 	}
 	var firstErr error
+	eligible := make([]eligibleTarget, 0, len(targets))
 	for _, target := range targets {
 		config, err := e.configs.GetAlertConfig(ctx, target.ID)
 		if err != nil {
@@ -95,56 +89,103 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 		if !config.Enabled || !containsInterval(config.Intervals, interval) {
 			continue
 		}
-		if err := e.executeTarget(ctx, target, config, period); err != nil && firstErr == nil {
+		eligible = append(eligible, eligibleTarget{target: target, config: config})
+	}
+
+	// Phase 1: create/lookup per-target job rows first; collect the union of
+	// symbols that still need a result this round.
+	pending := make([][]pendingJob, len(eligible))
+	dropped := make([]bool, len(eligible))
+	neededSet := make(map[string]struct{})
+	for i, et := range eligible {
+		jobsForTarget := make([]pendingJob, 0, len(et.config.Symbols))
+		for _, symbol := range et.config.Symbols {
+			job := domain.Job{
+				ID:          uuid.NewString(),
+				TargetID:    et.target.ID,
+				Symbol:      symbol,
+				Interval:    period.Interval,
+				PeriodStart: period.Start,
+				PeriodEnd:   period.End,
+				Status:      domain.JobPending,
+			}
+			created, isNew, err := e.jobs.CreateIfNotExists(ctx, job)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				dropped[i] = true
+				break
+			}
+			if !isNew && created.Status == domain.JobSent {
+				continue
+			}
+			jobsForTarget = append(jobsForTarget, pendingJob{job: created, symbol: symbol})
+			neededSet[symbol] = struct{}{}
+		}
+		if !dropped[i] {
+			pending[i] = jobsForTarget
+		}
+	}
+	if len(neededSet) == 0 {
+		return firstErr
+	}
+
+	// Phase 2: fetch each needed symbol ONCE, sequentially in sorted order.
+	symbols := make([]string, 0, len(neededSet))
+	for symbol := range neededSet {
+		symbols = append(symbols, symbol)
+	}
+	slices.Sort(symbols)
+	outcomes := make(map[string]fetchOutcome, len(symbols))
+	for _, symbol := range symbols {
+		candle, err := e.market.GetKline(ctx, symbol, period.Interval, period.Start, period.End)
+		if err != nil {
+			outcomes[symbol] = fetchOutcome{
+				result: notification.PriceResult{Change: domain.PriceChange{Symbol: symbol}, Unavailable: true},
+			}
+			continue
+		}
+		change, err := service.CalculateChange(candle, period.Interval, period)
+		if err != nil {
+			outcomes[symbol] = fetchOutcome{
+				result: notification.PriceResult{Change: domain.PriceChange{Symbol: symbol}, Unavailable: true},
+			}
+			continue
+		}
+		outcomes[symbol] = fetchOutcome{
+			result: notification.PriceResult{Change: change},
+		}
+	}
+
+	// Phase 3: deliver per target in original order from the shared map.
+	for i, et := range eligible {
+		if dropped[i] {
+			continue
+		}
+		if err := e.deliverToTarget(ctx, et.target, period, pending[i], outcomes); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
 	return firstErr
 }
 
-func (e *TargetExecutor) executeTarget(ctx context.Context, target domain.AlertTarget, config domain.AlertConfig, period domain.Period) error {
+func (e *TargetExecutor) deliverToTarget(ctx context.Context, target domain.AlertTarget, period domain.Period, pending []pendingJob, outcomes map[string]fetchOutcome) error {
 	type item struct {
 		job    domain.Job
 		result notification.PriceResult
 	}
-	items := make([]item, 0, len(config.Symbols))
-	for _, symbol := range config.Symbols {
-		job := domain.Job{
-			ID:          uuid.NewString(),
-			TargetID:    target.ID,
-			Symbol:      symbol,
-			Interval:    period.Interval,
-			PeriodStart: period.Start,
-			PeriodEnd:   period.End,
-			Status:      domain.JobPending,
-		}
-		created, isNew, err := e.jobs.CreateIfNotExists(ctx, job)
-		if err != nil {
-			return err
-		}
-		if !isNew && created.Status == domain.JobSent {
-			continue
-		}
-		candle, err := e.market.GetKline(ctx, symbol, period.Interval, period.Start, period.End)
-		if err != nil {
-			items = append(items, item{
-				job:    created,
-				result: notification.PriceResult{Change: domain.PriceChange{Symbol: symbol}, Unavailable: true},
-			})
-			continue
-		}
-
-		change, err := service.CalculateChange(candle, period.Interval, period)
-		if err != nil {
-			items = append(items, item{
-				job:    created,
-				result: notification.PriceResult{Change: domain.PriceChange{Symbol: symbol}, Unavailable: true},
-			})
-			continue
+	items := make([]item, 0, len(pending))
+	for _, p := range pending {
+		outcome, ok := outcomes[p.symbol]
+		if !ok {
+			outcome = fetchOutcome{
+				result: notification.PriceResult{Change: domain.PriceChange{Symbol: p.symbol}, Unavailable: true},
+			}
 		}
 		items = append(items, item{
-			job:    created,
-			result: notification.PriceResult{Change: change},
+			job:    p.job,
+			result: outcome.result,
 		})
 	}
 	if len(items) == 0 {
@@ -172,6 +213,23 @@ func (e *TargetExecutor) executeTarget(ctx context.Context, target domain.AlertT
 		}
 	}
 	return sendErr
+}
+
+// eligibleTarget pairs a target with its loaded alert configuration.
+type eligibleTarget struct {
+	target domain.AlertTarget
+	config domain.AlertConfig
+}
+
+// pendingJob is a job row that still needs a result delivered this round.
+type pendingJob struct {
+	job    domain.Job
+	symbol string
+}
+
+// fetchOutcome is the shared per-symbol result for one round.
+type fetchOutcome struct {
+	result notification.PriceResult
 }
 
 func containsInterval(values []domain.Interval, wanted domain.Interval) bool {
