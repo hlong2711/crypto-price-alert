@@ -497,6 +497,10 @@ func TestSaveAndCancelRouteThroughCommandService(t *testing.T) {
 		if payload["text"] != "ok" {
 			t.Fatalf("unexpected save response payload: %+v", payload)
 		}
+		answerPayload := lastPayloadForMethod(t, calls, "answerCallbackQuery")
+		if answerPayload["callback_query_id"] != "callback-115" {
+			t.Fatalf("unexpected save callback answer payload: %+v", answerPayload)
+		}
 	})
 
 	t.Run("cancel", func(t *testing.T) {
@@ -515,6 +519,10 @@ func TestSaveAndCancelRouteThroughCommandService(t *testing.T) {
 		payload := lastPayloadForMethod(t, calls, "sendMessage")
 		if payload["text"] != "ok" {
 			t.Fatalf("unexpected cancel response payload: %+v", payload)
+		}
+		answerPayload := lastPayloadForMethod(t, calls, "answerCallbackQuery")
+		if answerPayload["callback_query_id"] != "callback-117" {
+			t.Fatalf("unexpected cancel callback answer payload: %+v", answerPayload)
 		}
 	})
 }
