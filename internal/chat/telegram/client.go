@@ -86,7 +86,7 @@ func (c *APIClient) AnswerCallbackQuery(ctx context.Context, callbackID string, 
 	return c.call(ctx, "answerCallbackQuery", map[string]any{
 		"callback_query_id": callbackID,
 		"text":              text,
-		"show_alert":        strings.TrimSpace(text) != "",
+		"show_alert":        false, //not need show alert in app
 	}, nil)
 }
 

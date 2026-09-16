@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -296,7 +297,7 @@ func (a *Adapter) symbolKeyboard(session chat.ConfigSession) *InlineKeyboardMark
 
 	for _, symbol := range a.allowedSymbols {
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
-			Text:         selectedText(containsString(session.SelectedSymbols, symbol), symbol),
+			Text:         selectedText(slices.Contains(session.SelectedSymbols, symbol), symbol),
 			CallbackData: callbackData(session.SessionID, "symbol:"+symbol),
 		}})
 	}
@@ -316,7 +317,7 @@ func (a *Adapter) intervalKeyboard(session chat.ConfigSession) *InlineKeyboardMa
 	for _, interval := range a.allowedIntervals {
 		value := string(interval)
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
-			Text:         selectedText(containsInterval(session.SelectedIntervals, interval), value),
+			Text:         selectedText(slices.Contains(session.SelectedIntervals, interval), value),
 			CallbackData: callbackData(session.SessionID, "interval:"+value),
 		}})
 	}
@@ -344,24 +345,6 @@ func selectedText(selected bool, text string) string {
 		return "✓ " + text
 	}
 	return text
-}
-
-func containsString(values []string, value string) bool {
-	for _, current := range values {
-		if current == value {
-			return true
-		}
-	}
-	return false
-}
-
-func containsInterval(values []domain.Interval, value domain.Interval) bool {
-	for _, current := range values {
-		if current == value {
-			return true
-		}
-	}
-	return false
 }
 
 func joinSelectedStrings(values []string) string {
