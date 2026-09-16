@@ -243,7 +243,8 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 		if resp, err = a.commands.Handle(ctx, command); err != nil {
 			return err
 		}
-		if err := a.client.SendMessage(ctx, callback.Message.Chat.ID, resp, nil); err != nil {
+		finalText := fmt.Sprintf("%s\nSymbols: %s\nIntervals: %s", resp, joinSelectedStrings(session.SelectedSymbols), joinSelectedIntervals(session.SelectedIntervals))
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, finalText, emptyInlineKeyboard()); err != nil {
 			return err
 		}
 
@@ -252,7 +253,7 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 		if resp, err = a.commands.Handle(ctx, command); err != nil {
 			return err
 		}
-		if err := a.client.SendMessage(ctx, callback.Message.Chat.ID, resp, nil); err != nil {
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, resp, emptyInlineKeyboard()); err != nil {
 			return err
 		}
 
@@ -330,6 +331,12 @@ func (a *Adapter) intervalKeyboard(session chat.ConfigSession) *InlineKeyboardMa
 		},
 	)
 	return keyboard
+}
+
+// emptyInlineKeyboard clears the inline keyboard on an edited message.
+// Telegram removes buttons when editMessageText carries an empty inline_keyboard.
+func emptyInlineKeyboard() *InlineKeyboardMarkup {
+	return &InlineKeyboardMarkup{InlineKeyboard: [][]InlineKeyboardButton{}}
 }
 
 func symbolSelectionText(session chat.ConfigSession) string {

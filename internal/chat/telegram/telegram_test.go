@@ -493,9 +493,15 @@ func TestSaveAndCancelRouteThroughCommandService(t *testing.T) {
 		if commands.action != chat.ActionSave {
 			t.Fatalf("expected save action, got %s", commands.action)
 		}
-		payload := lastPayloadForMethod(t, calls, "sendMessage")
-		if payload["text"] != "ok" {
+		payload := lastPayloadForMethod(t, calls, "editMessageText")
+		text, _ := payload["text"].(string)
+		if !strings.HasPrefix(text, "ok") {
 			t.Fatalf("unexpected save response payload: %+v", payload)
+		}
+		if markup, ok := payload["reply_markup"].(map[string]any); !ok {
+			t.Fatalf("expected reply_markup to clear keyboard, got %+v", payload)
+		} else if rows, ok := markup["inline_keyboard"].([]any); !ok || len(rows) != 0 {
+			t.Fatalf("expected empty inline keyboard after save, got %+v", payload)
 		}
 		answerPayload := lastPayloadForMethod(t, calls, "answerCallbackQuery")
 		if answerPayload["callback_query_id"] != "callback-115" {
@@ -516,9 +522,14 @@ func TestSaveAndCancelRouteThroughCommandService(t *testing.T) {
 		if commands.action != chat.ActionCancel {
 			t.Fatalf("expected cancel action, got %s", commands.action)
 		}
-		payload := lastPayloadForMethod(t, calls, "sendMessage")
+		payload := lastPayloadForMethod(t, calls, "editMessageText")
 		if payload["text"] != "ok" {
 			t.Fatalf("unexpected cancel response payload: %+v", payload)
+		}
+		if markup, ok := payload["reply_markup"].(map[string]any); !ok {
+			t.Fatalf("expected reply_markup to clear keyboard, got %+v", payload)
+		} else if rows, ok := markup["inline_keyboard"].([]any); !ok || len(rows) != 0 {
+			t.Fatalf("expected empty inline keyboard after cancel, got %+v", payload)
 		}
 		answerPayload := lastPayloadForMethod(t, calls, "answerCallbackQuery")
 		if answerPayload["callback_query_id"] != "callback-117" {
