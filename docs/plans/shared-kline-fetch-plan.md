@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — awaiting review. Do not implement until approved.
+Implemented — all steps executed and verified (`go test ./...`, `go vet ./...`, `go build ./...` green).
 
 ## Objective
 
@@ -76,18 +76,18 @@ Concurrency/rate note:
 > non-overlapping code regions except where noted; Step 3 is the single behavior
 > change and must be applied atomically.
 
-- [ ] Step 0 — Baseline (no code change)
+- [x] Step 0 — Baseline (no code change)
   - Files: none.
   - Run: `go test ./internal/scheduler/... -count=1 -v` and `go build ./...`; record green baseline.
 
-- [ ] Step 1 — REMOVE legacy run from `TargetExecutor.Execute` (isolated delete)
+- [x] Step 1 — REMOVE legacy run from `TargetExecutor.Execute` (isolated delete)
   - File MODIFY: `internal/scheduler/target_executor.go:68-80`.
   - REMOVE: the `if len(targets) == 0 { ... legacy.Execute ... } else { // TODO: REMOVE ... go func() { legacy.Execute }() }` block.
   - ADD: `if len(targets) == 0 { return nil }` (zero targets = no-op).
   - Do NOT touch: struct field `legacy`, ctor `NewTargetExecutor` signature, `cmd/server/main.go` call sites (keeps this step conflict-free; field cleanup is deferred).
   - Done when: `grep -n "legacy.Execute" internal/scheduler/target_executor.go` returns nothing; `go build ./...` passes.
 
-- [ ] Step 2 — ADD shared-fetch scaffolding (purely additive, no behavior change)
+- [x] Step 2 — ADD shared-fetch scaffolding (purely additive, no behavior change)
   - File MODIFY (append-only): `internal/scheduler/target_executor.go` (bottom, near `containsInterval`).
   - ADD types only, nothing calls them yet:
     - `eligibleTarget{target domain.AlertTarget, config domain.AlertConfig}`
@@ -95,7 +95,7 @@ Concurrency/rate note:
     - `fetchOutcome{result notification.PriceResult}` (Unavailable encoded as today via `notification.PriceResult{Change: ..., Unavailable: true}`).
   - Done when: `go build ./...` + `go vet ./internal/scheduler/` pass; `Execute` behavior byte-identical.
 
-- [ ] Step 3 — MODIFY `Execute` to collect → fetch-once → deliver (the behavior change; atomic)
+- [x] Step 3 — MODIFY `Execute` to collect → fetch-once → deliver (the behavior change; atomic)
   - File MODIFY: `internal/scheduler/target_executor.go:59-103` (`Execute`) and `:105-175` (`executeTarget`).
   - MODIFY `Execute`: keep `mu.TryLock`, `ListEnabledTargets`, `GetCurrentPeriod` as-is; REPLACE the per-target `GetAlertConfig` + `executeTarget` loop with:
     1. collect `eligible` list (same skip rules: config-load error -> record `firstErr`, continue; `!Enabled`/interval mismatch -> skip);
@@ -106,7 +106,7 @@ Concurrency/rate note:
   - Do NOT touch in this step: test files, `Executor`, `AlertService`, provider, repository.
   - Done when: `go test ./internal/scheduler/... -count=1 -v` passes (old tests; new sharing tests come in Step 4).
 
-- [ ] Step 4 — MODIFY test harness + ADD sharing tests (test-only step)
+- [x] Step 4 — MODIFY test harness + ADD sharing tests (test-only step)
   - File MODIFY: `internal/scheduler/target_executor_test.go:115-119` (`fakeMarket`).
   - MODIFY `fakeMarket`: ADD `mu sync.Mutex` + `calls map[string]int` (+ `fail map[string]error` for the error case); `GetKline` records `calls[symbol]++` and returns injected error when set. Existing tests keep passing (they ignore counts; value receiver -> switch to pointer receiver + update `NewTargetExecutor(..., &fakeMarket{...} or newCountingMarket())` call sites `:33,63` accordingly in the same edit to avoid a half-broken state).
   - ADD tests (same file, no changes to production code):
@@ -117,7 +117,7 @@ Concurrency/rate note:
     5. fully-sent target skipped while fresh target still triggers fetch.
   - Done when: `go test ./internal/scheduler/... -count=1 -v` passes including the 5 new tests.
 
-- [ ] Step 5 — Full verification (no code change)
+- [x] Step 5 — Full verification (no code change)
   - Run: `go test ./... -count=1`, `go vet ./...`, `go build ./...`.
   - Done when: all green; expected effect spot-checked via Step 4 counters (N targets x M shared symbols -> M Binance calls).
 
