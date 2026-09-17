@@ -55,11 +55,9 @@ func NewTargetExecutor(
 	}, nil
 }
 
-// Execute loads targets and configurations at the period boundary; a duplicate tick is skipped while one is running.
+// Execute loads targets and configurations at the period boundary.
 func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval domain.Interval) error {
-	if !e.mu.TryLock() {
-		return nil
-	}
+	e.mu.Lock()
 	defer e.mu.Unlock()
 	targets, err := e.targets.ListEnabledTargets(ctx)
 	if err != nil {
