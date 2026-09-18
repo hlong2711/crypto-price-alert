@@ -23,7 +23,7 @@ type SchedulerExecutor interface {
 	Execute(context.Context, time.Time, domain.Interval) error
 }
 
-func NewScheduler(location *time.Location, executor SchedulerExecutor, tickInterval domain.Interval, intervals []domain.Interval) (*Scheduler, error) {
+func NewScheduler(location *time.Location, executor SchedulerExecutor, tickInterval domain.Interval, intervals []domain.Interval, activeFrom, activeUntil string) (*Scheduler, error) {
 	if location == nil || executor == nil || len(intervals) == 0 {
 		return nil, fmt.Errorf("invalid scheduler settings")
 	}
@@ -33,7 +33,7 @@ func NewScheduler(location *time.Location, executor SchedulerExecutor, tickInter
 	if err := tickInterval.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid tick_interval: %w", err)
 	}
-	periodEngine, err := NewPeriodEngine(location)
+	periodEngine, err := NewPeriodEngine(location, activeFrom, activeUntil)
 	if err != nil {
 		return nil, err
 	}

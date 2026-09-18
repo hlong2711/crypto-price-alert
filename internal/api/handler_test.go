@@ -128,7 +128,7 @@ func testDeps(t *testing.T, provider market.MarketDataProvider, sent *int) (*ser
 	if err != nil {
 		t.Fatal(err)
 	}
-	periods, err := scheduler.NewPeriodEngine(loc)
+	periods, err := scheduler.NewPeriodEngine(loc, "06:00", "23:00")
 	if err != nil {
 		t.Fatal(err)
 	}

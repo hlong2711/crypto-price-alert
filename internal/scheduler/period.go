@@ -8,14 +8,34 @@ import (
 )
 
 type PeriodEngine struct {
-	location *time.Location
+	location     *time.Location
+	activeFromM  int
+	activeUntilM int
 }
 
-func NewPeriodEngine(location *time.Location) (*PeriodEngine, error) {
+func NewPeriodEngine(location *time.Location, activeFrom, activeUntil string) (*PeriodEngine, error) {
 	if location == nil {
 		return nil, fmt.Errorf("location is required")
 	}
-	return &PeriodEngine{location: location}, nil
+	if activeFrom == "" {
+		activeFrom = "06:00"
+	}
+	if activeUntil == "" {
+		activeUntil = "23:00"
+	}
+	fromTime, err := time.Parse("15:04", activeFrom)
+	if err != nil {
+		return nil, fmt.Errorf("invalid activeFrom time format: %w", err)
+	}
+	untilTime, err := time.Parse("15:04", activeUntil)
+	if err != nil {
+		return nil, fmt.Errorf("invalid activeUntil time format: %w", err)
+	}
+	return &PeriodEngine{
+		location:     location,
+		activeFromM:  fromTime.Hour()*60 + fromTime.Minute(),
+		activeUntilM: untilTime.Hour()*60 + untilTime.Minute(),
+	}, nil
 }
 
 // GetCurrentPeriod returns the notification period that ended at now.
@@ -46,11 +66,8 @@ func (e *PeriodEngine) GetCurrentPeriod(now time.Time, interval domain.Interval)
 	startM := int(startLocal.Sub(baseDate).Minutes())
 	endM := int(endLocal.Sub(baseDate).Minutes())
 
-	activeFromM := 6 * 60
-	activeUntilM := 23 * 60
-
 	// out of working range
-	if startM < activeFromM || endM > activeUntilM {
+	if startM < e.activeFromM || endM > e.activeUntilM {
 		return domain.Period{}, false
 	}
 

@@ -52,19 +52,19 @@ func TestNewSchedulerValidation(t *testing.T) {
 	loc := time.UTC
 	exec := &mockExecutor{}
 
-	if _, err := NewScheduler(nil, exec, domain.Interval1M, []domain.Interval{domain.Interval1H}); err == nil {
+	if _, err := NewScheduler(nil, exec, domain.Interval1M, []domain.Interval{domain.Interval1H}, "06:00", "23:00"); err == nil {
 		t.Fatal("expected error for nil location")
 	}
 
-	if _, err := NewScheduler(loc, nil, domain.Interval1M, []domain.Interval{domain.Interval1H}); err == nil {
+	if _, err := NewScheduler(loc, nil, domain.Interval1M, []domain.Interval{domain.Interval1H}, "06:00", "23:00"); err == nil {
 		t.Fatal("expected error for nil executor")
 	}
 
-	if _, err := NewScheduler(loc, exec, domain.Interval1M, nil); err == nil {
+	if _, err := NewScheduler(loc, exec, domain.Interval1M, nil, "06:00", "23:00"); err == nil {
 		t.Fatal("expected error for empty intervals")
 	}
 
-	if _, err := NewScheduler(loc, exec, domain.Interval("invalid"), []domain.Interval{domain.Interval1H}); err == nil {
+	if _, err := NewScheduler(loc, exec, domain.Interval("invalid"), []domain.Interval{domain.Interval1H}, "06:00", "23:00"); err == nil {
 		t.Fatal("expected error for invalid tickInterval")
 	}
 }
@@ -75,7 +75,7 @@ func TestSchedulerTick(t *testing.T) {
 		t.Fatal(err)
 	}
 	exec := &mockExecutor{}
-	sched, err := NewScheduler(loc, exec, domain.Interval15M, []domain.Interval{domain.Interval15M, domain.Interval1H})
+	sched, err := NewScheduler(loc, exec, domain.Interval15M, []domain.Interval{domain.Interval15M, domain.Interval1H}, "06:00", "23:00")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -83,7 +83,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	periods, err := scheduler.NewPeriodEngine(location)
+	periods, err := scheduler.NewPeriodEngine(location, cfg.Schedule.ActiveFrom, cfg.Schedule.ActiveUntil)
 	if err != nil {
 		logger.Error("failed to initialize period engine", "error", err)
 		os.Exit(1)
@@ -104,7 +104,7 @@ func main() {
 		allowedIntervals = append(allowedIntervals, domain.Interval(value))
 	}
 
-	jobScheduler, err := scheduler.NewScheduler(location, targetExecutor, domain.Interval(cfg.Schedule.TickInterval), allowedIntervals)
+	jobScheduler, err := scheduler.NewScheduler(location, targetExecutor, domain.Interval(cfg.Schedule.TickInterval), allowedIntervals, cfg.Schedule.ActiveFrom, cfg.Schedule.ActiveUntil)
 	if err != nil {
 		logger.Error("failed to initialize scheduler", "error", err)
 		os.Exit(1)
