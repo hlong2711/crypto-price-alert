@@ -19,6 +19,7 @@ market:
 schedule:
   active_from: "06:00"
   active_until: "23:00"
+  tick_interval: "1m"
 
 notifications:
   # When true, messages are logged instead of sent to Telegram or Slack.

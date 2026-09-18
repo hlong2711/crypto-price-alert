@@ -31,7 +31,8 @@ func TestConfigValidateRejectsInvalidValues(t *testing.T) {
 		mutate func(*Config)
 	}{
 		{"timezone", func(c *Config) { c.App.Timezone = "invalid/timezone" }},
-		{"interval", func(c *Config) { c.Market.Intervals = []string{"15m"} }},
+		{"invalid_interval", func(c *Config) { c.Market.Intervals = []string{"10m"} }},
+		{"invalid_tick_interval", func(c *Config) { c.Schedule.TickInterval = "invalid" }},
 		{"channel", func(c *Config) { c.Notifications.Telegram.Enabled = false }},
 		{"retry", func(c *Config) { c.Retry.MaxAttempts = 0 }},
 	}

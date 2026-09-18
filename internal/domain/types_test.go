@@ -9,7 +9,13 @@ func TestDomainValidation(t *testing.T) {
 	if err := Interval1H.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if err := Interval("15m").Validate(); err == nil {
+	if err := Interval15M.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if dur, err := Interval15M.Duration(); err != nil || dur != 15*time.Minute {
+		t.Fatalf("expected 15m duration, got %v, err=%v", dur, err)
+	}
+	if err := Interval("10m").Validate(); err == nil {
 		t.Fatal("expected invalid interval")
 	}
 	now := time.Now()

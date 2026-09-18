@@ -8,6 +8,8 @@ import (
 	"time"
 	_ "time/tzdata"
 
+	"crypto-price-alert/internal/domain"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -42,8 +44,9 @@ type MarketConfig struct {
 }
 
 type ScheduleConfig struct {
-	ActiveFrom  string `yaml:"active_from"`
-	ActiveUntil string `yaml:"active_until"`
+	ActiveFrom   string `yaml:"active_from"`
+	ActiveUntil  string `yaml:"active_until"`
+	TickInterval string `yaml:"tick_interval"`
 }
 
 type NotificationsConfig struct {
@@ -107,6 +110,9 @@ func Load(path string) (Config, error) {
 	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
+	if cfg.Schedule.TickInterval == "" {
+		cfg.Schedule.TickInterval = "1m"
+	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, fmt.Errorf("validate config: %w", err)
 	}
@@ -136,8 +142,13 @@ func (c Config) Validate() error {
 		return errors.New("market.intervals must not be empty")
 	}
 	for _, interval := range c.Market.Intervals {
-		if interval != "1h" && interval != "4h" {
-			return fmt.Errorf("market.intervals: unsupported interval %q", interval)
+		if err := domain.Interval(interval).Validate(); err != nil {
+			return fmt.Errorf("market.intervals: %w", err)
+		}
+	}
+	if c.Schedule.TickInterval != "" {
+		if err := domain.Interval(c.Schedule.TickInterval).Validate(); err != nil {
+			return fmt.Errorf("schedule.tick_interval: %w", err)
 		}
 	}
 	if _, err := time.Parse("15:04", c.Schedule.ActiveFrom); err != nil {
