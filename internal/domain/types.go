@@ -11,6 +11,7 @@ const (
 	Interval1M  Interval = "1m"
 	Interval3M  Interval = "3m"
 	Interval5M  Interval = "5m"
+	Interval10M Interval = "10m"
 	Interval15M Interval = "15m"
 	Interval30M Interval = "30m"
 	Interval1H  Interval = "1h"
@@ -32,6 +33,8 @@ func (i Interval) Duration() (time.Duration, error) {
 		return 3 * time.Minute, nil
 	case Interval5M:
 		return 5 * time.Minute, nil
+	case Interval10M:
+		return 10 * time.Minute, nil
 	case Interval15M:
 		return 15 * time.Minute, nil
 	case Interval30M:
