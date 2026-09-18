@@ -3,6 +3,8 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"slices"
 	"sync"
 	"time"
@@ -27,6 +29,7 @@ type TargetExecutor struct {
 	legacy    *Executor
 	location  *time.Location
 	mu        sync.Mutex
+	logger    *slog.Logger
 }
 
 // NewTargetExecutor creates a coordinator-safe executor with a legacy fallback.
@@ -43,6 +46,8 @@ func NewTargetExecutor(
 	if periods == nil || provider == nil || jobs == nil || targets == nil || configs == nil || len(notifiers) == 0 || location == nil {
 		return nil, fmt.Errorf("invalid target executor settings")
 	}
+
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	return &TargetExecutor{
 		periods:   periods,
 		market:    provider,
@@ -52,6 +57,7 @@ func NewTargetExecutor(
 		notifiers: notifiers,
 		legacy:    legacy,
 		location:  location,
+		logger:    logger,
 	}, nil
 }
 
@@ -59,10 +65,18 @@ func NewTargetExecutor(
 func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval domain.Interval) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	period, due := e.periods.GetCurrentPeriod(now, interval)
+	if !due {
+		return nil
+	}
+
 	targets, err := e.targets.ListEnabledTargets(ctx)
 	if err != nil {
 		return err
 	}
+
+	e.logger.Info("target execute for interval", "inteval", interval, "targetCount", len(targets))
 	if len(targets) == 0 {
 		if e.legacy == nil {
 			return nil
@@ -70,10 +84,6 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 		return e.legacy.Execute(ctx, now, interval)
 	}
 
-	period, due := e.periods.GetCurrentPeriod(now, interval)
-	if !due {
-		return nil
-	}
 	var firstErr error
 	eligible := make([]eligibleTarget, 0, len(targets))
 	for _, target := range targets {
@@ -156,6 +166,7 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 		}
 	}
 
+	e.logger.Info("target delivery to targets", "inteval", interval, "targetCount", len(eligible))
 	// Phase 3: deliver per target in original order from the shared map.
 	for i, et := range eligible {
 		if dropped[i] {
