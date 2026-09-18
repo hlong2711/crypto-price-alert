@@ -8,15 +8,60 @@ import (
 type Interval string
 
 const (
-	Interval1H Interval = "1h"
-	Interval4H Interval = "4h"
+	Interval1M  Interval = "1m"
+	Interval3M  Interval = "3m"
+	Interval5M  Interval = "5m"
+	Interval15M Interval = "15m"
+	Interval30M Interval = "30m"
+	Interval1H  Interval = "1h"
+	Interval2H  Interval = "2h"
+	Interval4H  Interval = "4h"
+	Interval6H  Interval = "6h"
+	Interval8H  Interval = "8h"
+	Interval12H Interval = "12h"
+	Interval1D  Interval = "1d"
+	Interval3D  Interval = "3d"
+	Interval1W  Interval = "1w"
 )
 
-func (i Interval) Validate() error {
-	if i != Interval1H && i != Interval4H {
-		return fmt.Errorf("unsupported interval %q", i)
+func (i Interval) Duration() (time.Duration, error) {
+	switch i {
+	case Interval1M:
+		return time.Minute, nil
+	case Interval3M:
+		return 3 * time.Minute, nil
+	case Interval5M:
+		return 5 * time.Minute, nil
+	case Interval15M:
+		return 15 * time.Minute, nil
+	case Interval30M:
+		return 30 * time.Minute, nil
+	case Interval1H:
+		return time.Hour, nil
+	case Interval2H:
+		return 2 * time.Hour, nil
+	case Interval4H:
+		return 4 * time.Hour, nil
+	case Interval6H:
+		return 6 * time.Hour, nil
+	case Interval8H:
+		return 8 * time.Hour, nil
+	case Interval12H:
+		return 12 * time.Hour, nil
+	case Interval1D:
+		return 24 * time.Hour, nil
+	case Interval3D:
+		return 3 * 24 * time.Hour, nil
+	case Interval1W:
+		return 7 * 24 * time.Hour, nil
+	default:
+		return 0, fmt.Errorf("unsupported interval %q", i)
 	}
-	return nil
+}
+
+func (i Interval) Validate() error {
+	_, err := i.Duration()
+	return err
 }
 
 type Period struct {

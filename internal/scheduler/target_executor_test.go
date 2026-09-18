@@ -17,7 +17,7 @@ func TestTargetExecutorUsesLatestPerTargetConfiguration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	periods, err := NewPeriodEngine(location)
+	periods, err := NewPeriodEngine(location, "06:00", "23:00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestTargetExecutorUsesLatestPerTargetConfiguration(t *testing.T) {
 
 func TestTargetExecutorSkipsPausedTargets(t *testing.T) {
 	location, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
-	periods, _ := NewPeriodEngine(location)
+	periods, _ := NewPeriodEngine(location, "06:00", "23:00")
 	targets := targetRepo{values: []domain.AlertTarget{{ID: "paused", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat", Enabled: true}}}
 	configs := configRepo{values: map[string]domain.AlertConfig{"paused": {TargetID: "paused", Enabled: false, Symbols: []string{"BTCUSDT"}, Intervals: []domain.Interval{domain.Interval1H}}}}
 	notifier := &targetCaptureNotifier{}
@@ -75,7 +75,7 @@ func TestTargetExecutorSkipsPausedTargets(t *testing.T) {
 
 func TestTargetExecutorFetchesSharedSymbolOnce(t *testing.T) {
 	location, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
-	periods, _ := NewPeriodEngine(location)
+	periods, _ := NewPeriodEngine(location, "06:00", "23:00")
 	targets := targetRepo{values: []domain.AlertTarget{
 		{ID: "target-a", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat-a", Enabled: true},
 		{ID: "target-b", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat-b", Enabled: true},
@@ -109,7 +109,7 @@ func TestTargetExecutorFetchesSharedSymbolOnce(t *testing.T) {
 
 func TestTargetExecutorFetchesUnionOfSymbolsOnce(t *testing.T) {
 	location, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
-	periods, _ := NewPeriodEngine(location)
+	periods, _ := NewPeriodEngine(location, "06:00", "23:00")
 	targets := targetRepo{values: []domain.AlertTarget{
 		{ID: "target-a", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat-a", Enabled: true},
 		{ID: "target-b", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat-b", Enabled: true},
@@ -146,7 +146,7 @@ func TestTargetExecutorFetchesUnionOfSymbolsOnce(t *testing.T) {
 
 func TestTargetExecutorSharedFetchFailureMarksAllSharersUnavailable(t *testing.T) {
 	location, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
-	periods, _ := NewPeriodEngine(location)
+	periods, _ := NewPeriodEngine(location, "06:00", "23:00")
 	targets := targetRepo{values: []domain.AlertTarget{
 		{ID: "target-a", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat-a", Enabled: true},
 		{ID: "target-b", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat-b", Enabled: true},
@@ -185,7 +185,7 @@ func TestTargetExecutorSharedFetchFailureMarksAllSharersUnavailable(t *testing.T
 
 func TestTargetExecutorDuplicateTickFetchesNothing(t *testing.T) {
 	location, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
-	periods, _ := NewPeriodEngine(location)
+	periods, _ := NewPeriodEngine(location, "06:00", "23:00")
 	targets := targetRepo{values: []domain.AlertTarget{
 		{ID: "target-a", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat-a", Enabled: true},
 		{ID: "target-b", Provider: domain.ChatProviderTelegram, ExternalChatID: "chat-b", Enabled: true},
@@ -218,7 +218,7 @@ func TestTargetExecutorDuplicateTickFetchesNothing(t *testing.T) {
 
 func TestTargetExecutorSkipsSentTargetButFetchesFreshTarget(t *testing.T) {
 	location, _ := time.LoadLocation("Asia/Ho_Chi_Minh")
-	periods, _ := NewPeriodEngine(location)
+	periods, _ := NewPeriodEngine(location, "06:00", "23:00")
 	now := time.Date(2026, 9, 1, 10, 0, 0, 0, location)
 	jobs := newJobRepo()
 	market := newCountingMarket()

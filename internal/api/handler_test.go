@@ -128,7 +128,7 @@ func testDeps(t *testing.T, provider market.MarketDataProvider, sent *int) (*ser
 	if err != nil {
 		t.Fatal(err)
 	}
-	periods, err := scheduler.NewPeriodEngine(loc)
+	periods, err := scheduler.NewPeriodEngine(loc, "06:00", "23:00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestRunAlertInvalidInterval(t *testing.T) {
 	alerts, periods := testDeps(t, stubProvider{}, &sent)
 	e := NewServer(alerts, periods)
 
-	record := doRunAlert(e, `{"interval":"5m","dry_run":true}`)
+	record := doRunAlert(e, `{"interval":"10m","dry_run":true}`)
 	if record.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s, want 400", record.Code, record.Body.String())
 	}

@@ -13,7 +13,7 @@ func newTestEngine(t *testing.T) *PeriodEngine {
 	if err != nil {
 		t.Fatal(err)
 	}
-	engine, err := NewPeriodEngine(location)
+	engine, err := NewPeriodEngine(location, "06:00", "23:00")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,5 +88,59 @@ func TestPeriodEngineRequiresExactHour(t *testing.T) {
 	location := engine.location
 	if _, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 10, 30, 0, 0, location), domain.Interval1H); ok {
 		t.Fatal("expected no period away from the hour boundary")
+	}
+}
+
+func TestPeriodEngineFifteenMinuteAndTwoHourWindows(t *testing.T) {
+	engine := newTestEngine(t)
+	location := engine.location
+
+	// 15m tests
+	p15, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 10, 15, 0, 0, location), domain.Interval15M)
+	if !ok || p15.End.Sub(p15.Start) != 15*time.Minute {
+		t.Fatalf("expected valid 15m period, got ok=%v, period=%+v", ok, p15)
+	}
+
+	// 15m off-boundary
+	if _, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 10, 16, 0, 0, location), domain.Interval15M); ok {
+		t.Fatal("expected off-boundary 15m to fail")
+	}
+
+	// 2h tests (Asia/Ho_Chi_Minh: 07:00, 09:00, 11:00...)
+	p2h, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 9, 0, 0, 0, location), domain.Interval2H)
+	if !ok || p2h.End.Sub(p2h.Start) != 2*time.Hour || p2h.Start.Hour() != 7 {
+		t.Fatalf("expected valid 2h period (07:00 -> 09:00), got ok=%v, period=%+v", ok, p2h)
+	}
+}
+
+func TestPeriodEngineCustomActiveWindow(t *testing.T) {
+	location, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Custom window 08:00 to 20:00
+	engine, err := NewPeriodEngine(location, "08:00", "20:00")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 08:00 (start=07:00, end=08:00) -> start 07:00 is before activeFrom 08:00 -> invalid
+	if _, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 8, 0, 0, 0, location), domain.Interval1H); ok {
+		t.Fatal("08:00 period starting at 07:00 should be outside active window 08:00-20:00")
+	}
+
+	// 09:00 (start=08:00, end=09:00) -> valid
+	if _, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 9, 0, 0, 0, location), domain.Interval1H); !ok {
+		t.Fatal("09:00 period starting at 08:00 should be valid within 08:00-20:00")
+	}
+
+	// 20:00 (start=19:00, end=20:00) -> valid
+	if _, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 20, 0, 0, 0, location), domain.Interval1H); !ok {
+		t.Fatal("20:00 period ending at 20:00 should be valid within 08:00-20:00")
+	}
+
+	// 21:00 (start=20:00, end=21:00) -> end 21:00 is after activeUntil 20:00 -> invalid
+	if _, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 21, 0, 0, 0, location), domain.Interval1H); ok {
+		t.Fatal("21:00 period ending at 21:00 should be outside active window 08:00-20:00")
 	}
 }
