@@ -20,49 +20,39 @@ func NewPeriodEngine(location *time.Location) (*PeriodEngine, error) {
 
 // GetCurrentPeriod returns the notification period that ended at now.
 func (e *PeriodEngine) GetCurrentPeriod(now time.Time, interval domain.Interval) (domain.Period, bool) {
-	if e == nil || e.location == nil || interval.Validate() != nil {
+	if e == nil || e.location == nil {
 		return domain.Period{}, false
 	}
-	localNow := now.In(e.location)
-	date := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), 0, 0, 0, 0, e.location)
-	minute := localNow.Hour()*60 + localNow.Minute()
-
-	var start, end time.Time
-	switch interval {
-	case domain.Interval1H:
-		if minute < 6*60 || minute >= 23*60 {
-			return domain.Period{}, false
-		}
-		if localNow.Minute() != 0 {
-			return domain.Period{}, false
-		}
-		end = time.Date(date.Year(), date.Month(), date.Day(), localNow.Hour(), 0, 0, 0, e.location)
-		start = end.Add(-time.Hour)
-		if start.Hour() < 6 {
-			return domain.Period{}, false
-		}
-	case domain.Interval4H:
-		// Binance 4h candles are aligned to UTC. In Asia/Ho_Chi_Minh,
-		// those boundaries are 07:00, 11:00, 15:00, 19:00, and 23:00.
-		if minute < 7*60 || minute > 23*60 {
-			return domain.Period{}, false
-		}
-		switch localNow.Hour() {
-		case 11:
-			start = time.Date(date.Year(), date.Month(), date.Day(), 7, 0, 0, 0, e.location)
-		case 15:
-			start = time.Date(date.Year(), date.Month(), date.Day(), 11, 0, 0, 0, e.location)
-		case 19:
-			start = time.Date(date.Year(), date.Month(), date.Day(), 15, 0, 0, 0, e.location)
-		case 23:
-			start = time.Date(date.Year(), date.Month(), date.Day(), 19, 0, 0, 0, e.location)
-		default:
-			return domain.Period{}, false
-		}
-		if localNow.Minute() != 0 {
-			return domain.Period{}, false
-		}
-		end = time.Date(date.Year(), date.Month(), date.Day(), localNow.Hour(), 0, 0, 0, e.location)
+	dur, err := interval.Duration()
+	if err != nil {
+		return domain.Period{}, false
 	}
+
+	localNow := now.In(e.location).Truncate(time.Minute)
+	end := localNow
+	start := end.Add(-dur)
+
+	utcEnd := end.UTC()
+	utcMidnight := time.Date(utcEnd.Year(), utcEnd.Month(), utcEnd.Day(), 0, 0, 0, 0, time.UTC)
+	elapsed := utcEnd.Sub(utcMidnight)
+	if elapsed < 0 || elapsed%dur != 0 {
+		return domain.Period{}, false
+	}
+
+	startLocal := start.In(e.location)
+	endLocal := end.In(e.location)
+	baseDate := time.Date(startLocal.Year(), startLocal.Month(), startLocal.Day(), 0, 0, 0, 0, e.location)
+
+	startM := int(startLocal.Sub(baseDate).Minutes())
+	endM := int(endLocal.Sub(baseDate).Minutes())
+
+	activeFromM := 6 * 60
+	activeUntilM := 23 * 60
+
+	// out of working range
+	if startM < activeFromM || endM > activeUntilM {
+		return domain.Period{}, false
+	}
+
 	return domain.Period{Interval: interval, Start: start, End: end}, true
 }

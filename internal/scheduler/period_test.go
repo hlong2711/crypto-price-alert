@@ -90,3 +90,25 @@ func TestPeriodEngineRequiresExactHour(t *testing.T) {
 		t.Fatal("expected no period away from the hour boundary")
 	}
 }
+
+func TestPeriodEngineFifteenMinuteAndTwoHourWindows(t *testing.T) {
+	engine := newTestEngine(t)
+	location := engine.location
+
+	// 15m tests
+	p15, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 10, 15, 0, 0, location), domain.Interval15M)
+	if !ok || p15.End.Sub(p15.Start) != 15*time.Minute {
+		t.Fatalf("expected valid 15m period, got ok=%v, period=%+v", ok, p15)
+	}
+
+	// 15m off-boundary
+	if _, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 10, 16, 0, 0, location), domain.Interval15M); ok {
+		t.Fatal("expected off-boundary 15m to fail")
+	}
+
+	// 2h tests (Asia/Ho_Chi_Minh: 07:00, 09:00, 11:00...)
+	p2h, ok := engine.GetCurrentPeriod(time.Date(2026, 9, 1, 9, 0, 0, 0, location), domain.Interval2H)
+	if !ok || p2h.End.Sub(p2h.Start) != 2*time.Hour || p2h.Start.Hour() != 7 {
+		t.Fatalf("expected valid 2h period (07:00 -> 09:00), got ok=%v, period=%+v", ok, p2h)
+	}
+}
