@@ -34,7 +34,8 @@ type HTTPConfig struct {
 }
 
 type DatabaseConfig struct {
-	URL string `yaml:"url"`
+	URL                       string        `yaml:"url"`
+	NotificationJobsRetention time.Duration `yaml:"notification_jobs_retention"`
 }
 
 type MarketConfig struct {
@@ -131,6 +132,9 @@ func (c Config) Validate() error {
 	}
 	if strings.TrimSpace(c.Database.URL) == "" {
 		return errors.New("database.url is required")
+	}
+	if c.Database.NotificationJobsRetention < 0 {
+		return errors.New("database.notification_jobs_retention must not be negative")
 	}
 	if c.Market.Provider != "binance" {
 		return fmt.Errorf("market.provider %q is unsupported", c.Market.Provider)

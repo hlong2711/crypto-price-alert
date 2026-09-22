@@ -60,6 +60,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	stopNotificationJobCleanup, err := startNotificationJobCleanup(cfg, location, jobRepo, logger)
+	if err != nil {
+		logger.Error("failed to start notification job cleanup", "error", err)
+		os.Exit(1)
+	}
+	defer stopNotificationJobCleanup()
+
 	provider, err := market.NewBinanceProvider(
 		"",
 		&http.Client{Timeout: 10 * time.Second},
@@ -127,6 +134,37 @@ func main() {
 	}
 
 	initServer(logger, cfg, cfg.App.HTTP.Address, alertService, periods, jobRepo)
+}
+
+func startNotificationJobCleanup(
+	cfg config.Config,
+	location *time.Location,
+	jobRepo repository.NotificationJobCleanupRepository,
+	logger *slog.Logger,
+) (func(), error) {
+	if cfg.Database.NotificationJobsRetention <= 0 {
+		return func() {}, nil
+	}
+
+	cleanupScheduler, err := scheduler.NewNotificationJobCleanupScheduler(
+		location,
+		jobRepo,
+		cfg.Database.NotificationJobsRetention,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("initialize notification job cleanup scheduler: %w", err)
+	}
+	if err := cleanupScheduler.Start(); err != nil {
+		return nil, fmt.Errorf("start notification job cleanup scheduler: %w", err)
+	}
+
+	logger.Info("notification job cleanup scheduler started", "retention", cfg.Database.NotificationJobsRetention)
+	return func() {
+		if err := cleanupScheduler.Stop().Err(); err != nil {
+			logger.Error("notification job cleanup scheduler shutdown failed", "error", err)
+		}
+	}, nil
 }
 
 func newNotifiers(cfg config.Config, logger *slog.Logger) ([]notification.Notifier, error) {

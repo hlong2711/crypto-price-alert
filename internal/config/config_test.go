@@ -25,6 +25,24 @@ func TestConfigValidate(t *testing.T) {
 	}
 }
 
+func TestConfigValidateNotificationJobsRetention(t *testing.T) {
+	cfg := validConfig()
+	cfg.Database.NotificationJobsRetention = 720 * time.Hour
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected positive retention to validate, got %v", err)
+	}
+
+	cfg.Database.NotificationJobsRetention = 0
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected zero retention to disable cleanup, got %v", err)
+	}
+
+	cfg.Database.NotificationJobsRetention = -time.Second
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected negative retention to fail validation")
+	}
+}
+
 func TestConfigValidateRejectsInvalidValues(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -83,6 +101,7 @@ func TestLoadExpandsEnvironmentVariables(t *testing.T) {
     address: ":8080"
 database:
   url: "${TEST_DATABASE_URL}"
+  notification_jobs_retention: 720h
 market:
   provider: binance
   symbols: [BTCUSDT]
@@ -111,6 +130,9 @@ concurrency:
 	}
 	if cfg.Database.URL != "postgres://example/crypto_alert" {
 		t.Fatalf("unexpected database URL: %q", cfg.Database.URL)
+	}
+	if cfg.Database.NotificationJobsRetention != 720*time.Hour {
+		t.Fatalf("unexpected notification job retention: %v", cfg.Database.NotificationJobsRetention)
 	}
 	if !cfg.Notifications.Dry {
 		t.Fatal("expected notifications.dry to be true")
