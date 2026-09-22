@@ -11,7 +11,7 @@ const (
 	Interval1M  Interval = "1m"
 	Interval3M  Interval = "3m"
 	Interval5M  Interval = "5m"
-	Interval10M Interval = "10m"
+	Interval10M Interval = "10m" // should not used for kline interval param
 	Interval15M Interval = "15m"
 	Interval30M Interval = "30m"
 	Interval1H  Interval = "1h"
