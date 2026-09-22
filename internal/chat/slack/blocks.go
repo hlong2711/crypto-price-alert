@@ -7,11 +7,23 @@ import (
 )
 
 // ConfigurationBlocks renders allowed symbols and intervals as Block Kit controls.
-func ConfigurationBlocks(sessionID string, symbols []string, intervals []domain.Interval) []Block {
+func ConfigurationBlocks(sessionID string, providers []domain.MarketProvider, symbols []string, intervals []domain.Interval) []Block {
 	blocks := []Block{{
 		Type: "section",
-		Text: &TextObject{Type: "mrkdwn", Text: "Select symbols and intervals, then save."},
+		Text: &TextObject{Type: "mrkdwn", Text: "Select a market provider, symbols, and intervals, then save."},
 	}}
+	for _, provider := range providers {
+		value := string(provider)
+		blocks = append(blocks, Block{
+			Type: "actions",
+			Elements: []BlockElement{{
+				Type:     "button",
+				ActionID: "crypto_alert_provider",
+				Text:     &TextObject{Type: "plain_text", Text: value},
+				Value:    fmt.Sprintf("%s|provider|%s", sessionID, value),
+			}},
+		})
+	}
 
 	for _, symbol := range symbols {
 		blocks = append(blocks, Block{Type: "actions", Elements: []BlockElement{{

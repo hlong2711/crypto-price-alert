@@ -12,6 +12,7 @@ import (
 
 	"crypto-price-alert/internal/chat"
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/market"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -33,7 +34,7 @@ type EventRepository interface {
 // CommandService is the platform-independent command surface used by Slack.
 type CommandService interface {
 	Handle(context.Context, chat.Command) (string, error)
-	UpdateSession(context.Context, chat.Command, []string, []domain.Interval) error
+	UpdateSession(context.Context, chat.Command, domain.MarketProvider, []string, []domain.Interval) error
 }
 
 // Adapter authenticates Slack requests and translates them to generic chat commands.
@@ -49,13 +50,24 @@ type Adapter struct {
 	expectedTeamID string
 	symbols        []string
 	intervals      []domain.Interval
+	providers      market.ProviderResolver
 	replayWindow   time.Duration
 	now            func() time.Time
 }
 
 // NewAdapter creates a Slack chat adapter with request replay protection.
-func NewAdapter(client *APIClient, targets TargetRepository, events EventRepository, commands CommandService, sessions chat.SessionStore, signingSecret, tenantID, expectedAppID, expectedTeamID string, symbols []string, intervals []domain.Interval) (*Adapter, error) {
-	if client == nil || targets == nil || events == nil || commands == nil || sessions == nil || strings.TrimSpace(signingSecret) == "" || strings.TrimSpace(tenantID) == "" {
+func NewAdapter(
+	client *APIClient,
+	targets TargetRepository,
+	events EventRepository,
+	commands CommandService,
+	sessions chat.SessionStore,
+	signingSecret, tenantID, expectedAppID, expectedTeamID string,
+	symbols []string,
+	intervals []domain.Interval,
+	providers market.ProviderResolver,
+) (*Adapter, error) {
+	if client == nil || targets == nil || events == nil || commands == nil || sessions == nil || providers == nil || strings.TrimSpace(signingSecret) == "" || strings.TrimSpace(tenantID) == "" {
 		return nil, fmt.Errorf("invalid Slack adapter settings")
 	}
 	return &Adapter{
@@ -70,6 +82,7 @@ func NewAdapter(client *APIClient, targets TargetRepository, events EventReposit
 		expectedTeamID: expectedTeamID,
 		symbols:        append([]string(nil), symbols...),
 		intervals:      append([]domain.Interval(nil), intervals...),
+		providers:      providers,
 		replayWindow:   5 * time.Minute,
 		now:            time.Now,
 	}, nil
@@ -202,9 +215,14 @@ func (a *Adapter) processSlash(ctx context.Context, payload SlashCommand) error 
 	if action == chat.ActionHelp || action == chat.ActionConfigure {
 		result.Text = response
 	}
+
 	if action == chat.ActionConfigure {
-		result.Text = "Choose configuration values:"
-		result.Blocks = ConfigurationBlocks(response, a.symbols, a.intervals)
+		session, getErr := a.sessions.Get(ctx, response)
+		if getErr != nil {
+			return a.respondError(ctx, payload.ResponseURL, getErr)
+		}
+		result.Text = "Choose a market provider, symbols, and intervals:"
+		result.Blocks = ConfigurationBlocks(response, a.providers.Enabled(), a.availableSymbols(session.SelectedProvider), a.availableIntervals(session.SelectedProvider))
 	}
 	return a.client.Respond(ctx, payload.ResponseURL, result)
 }
@@ -242,6 +260,15 @@ func (a *Adapter) processInteraction(ctx context.Context, payload Interaction) e
 		}
 		command.Arguments = []string{sessionID}
 		switch parts[1] {
+		case "provider":
+			provider := domain.MarketProvider(parts[2])
+			if !a.providerEnabled(provider) {
+				return a.respondError(ctx, payload.ResponseURL, fmt.Errorf("market provider %q is not enabled", provider))
+			}
+			session.SelectedProvider = provider
+			session.SelectedSymbols = filterStrings(session.SelectedSymbols, a.availableSymbols(provider))
+			session.SelectedIntervals = filterIntervals(session.SelectedIntervals, a.availableIntervals(provider))
+
 		case "symbol":
 			session.SelectedSymbols = toggleString(session.SelectedSymbols, parts[2])
 
@@ -252,13 +279,13 @@ func (a *Adapter) processInteraction(ctx context.Context, payload Interaction) e
 			return a.respondError(ctx, payload.ResponseURL, fmt.Errorf("unsupported configuration control"))
 		}
 
-		if err := a.commands.UpdateSession(ctx, command, session.SelectedSymbols, session.SelectedIntervals); err != nil {
+		if err := a.commands.UpdateSession(ctx, command, session.SelectedProvider, session.SelectedSymbols, session.SelectedIntervals); err != nil {
 			return a.respondError(ctx, payload.ResponseURL, err)
 		}
 		return a.client.Respond(ctx, payload.ResponseURL, Response{
 			ResponseType: "ephemeral",
 			Text:         "Selection updated.",
-			Blocks:       ConfigurationBlocks(sessionID, a.symbols, a.intervals),
+			Blocks:       ConfigurationBlocks(sessionID, a.providers.Enabled(), a.availableSymbols(session.SelectedProvider), a.availableIntervals(session.SelectedProvider)),
 		})
 	}
 	command.Arguments = []string{sessionID}
@@ -285,6 +312,66 @@ func (a *Adapter) processInteraction(ctx context.Context, payload Interaction) e
 	default:
 		return a.respondError(ctx, payload.ResponseURL, fmt.Errorf("unsupported configuration control"))
 	}
+}
+
+func (a *Adapter) providerEnabled(provider domain.MarketProvider) bool {
+	for _, enabled := range a.providers.Enabled() {
+		if enabled == provider {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Adapter) availableSymbols(provider domain.MarketProvider) []string {
+	result := make([]string, 0, len(a.symbols))
+	for _, symbol := range a.symbols {
+		for _, interval := range a.intervals {
+			if a.providers.Supports(provider, symbol, interval) {
+				result = append(result, symbol)
+				break
+			}
+		}
+	}
+	return result
+}
+
+func (a *Adapter) availableIntervals(provider domain.MarketProvider) []domain.Interval {
+	result := make([]domain.Interval, 0, len(a.intervals))
+	for _, interval := range a.intervals {
+		for _, symbol := range a.symbols {
+			if a.providers.Supports(provider, symbol, interval) {
+				result = append(result, interval)
+				break
+			}
+		}
+	}
+	return result
+}
+
+func filterStrings(values, allowed []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, candidate := range allowed {
+			if value == candidate {
+				result = append(result, value)
+				break
+			}
+		}
+	}
+	return result
+}
+func filterIntervals(values, allowed []domain.Interval) []domain.Interval {
+	result := make([]domain.Interval, 0, len(values))
+	for _, value := range values {
+		for _, candidate := range allowed {
+			if value == candidate {
+				result = append(result, value)
+				break
+			}
+		}
+	}
+	return result
 }
 
 func (a *Adapter) targetForChannel(ctx context.Context, channelID, name, teamID string) (domain.AlertTarget, error) {

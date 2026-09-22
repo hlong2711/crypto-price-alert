@@ -15,6 +15,7 @@ import (
 
 	"crypto-price-alert/internal/chat"
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/market"
 	"github.com/labstack/echo/v4"
 )
 
@@ -45,7 +46,7 @@ func TestSlashCommandWebhookAcknowledgesAndDispatches(t *testing.T) {
 	}
 	events := &fakeEvents{claimed: true, processed: make(chan struct{})}
 	commands := &fakeCommands{handled: make(chan chat.Command, 1)}
-	adapter, err := NewAdapter(client, fakeTargets{}, events, commands, chat.NewMemorySessionStore(), "secret", "tenant", "app", "team", []string{"BTCUSDT"}, []domain.Interval{domain.Interval1H})
+	adapter, err := NewAdapter(client, fakeTargets{}, events, commands, chat.NewMemorySessionStore(), "secret", "tenant", "app", "team", []string{"BTCUSDT"}, []domain.Interval{domain.Interval1H}, market.NewStaticProviderResolver(testMarketProvider{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +78,7 @@ func TestSlashCommandWebhookAcknowledgesAndDispatches(t *testing.T) {
 }
 
 func TestConfigurationBlocksUseSessionScopedValues(t *testing.T) {
-	blocks := ConfigurationBlocks("session-1", []string{"BTCUSDT"}, []domain.Interval{domain.Interval4H})
+	blocks := ConfigurationBlocks("session-1", []domain.MarketProvider{domain.MarketProviderBinance}, []string{"BTCUSDT"}, []domain.Interval{domain.Interval4H})
 	data, err := json.Marshal(blocks)
 	if err != nil {
 		t.Fatal(err)
@@ -184,6 +185,12 @@ func (f *fakeCommands) Handle(_ context.Context, command chat.Command) (string, 
 	f.handled <- command
 	return "help, configure, show, enable, pause, test", nil
 }
-func (*fakeCommands) UpdateSession(context.Context, chat.Command, []string, []domain.Interval) error {
+func (*fakeCommands) UpdateSession(context.Context, chat.Command, domain.MarketProvider, []string, []domain.Interval) error {
 	return nil
+}
+
+type testMarketProvider struct{}
+
+func (testMarketProvider) GetKline(context.Context, string, domain.Interval, time.Time, time.Time) (domain.Candle, error) {
+	return domain.Candle{}, nil
 }

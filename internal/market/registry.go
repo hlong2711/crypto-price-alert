@@ -48,15 +48,18 @@ func NewProviderRegistry(marketConfig config.MarketConfig, client *http.Client, 
 				mappings[symbol] = mapping.Symbol
 			}
 			provider, err = NewBinanceProvider(providerConfig.BaseURL, client, maxAttempts, backoff, concurrency, mappings)
+
 		case domain.MarketProviderCoinMarketCap:
 			mappings := make(map[string]CoinMarketCapSymbol, len(providerConfig.Symbols))
 			for symbol, mapping := range providerConfig.Symbols {
 				mappings[symbol] = CoinMarketCapSymbol{Platform: mapping.Platform, Address: mapping.Address}
 			}
 			provider, err = NewCoinMarketCapProvider(providerConfig.BaseURL, providerConfig.APIKey, providerConfig.Unit, mappings, client, maxAttempts, backoff, concurrency)
+
 		default:
 			err = fmt.Errorf("unsupported market provider %q", providerName)
 		}
+
 		if err != nil {
 			return nil, fmt.Errorf("initialize market provider %s: %w", providerName, err)
 		}

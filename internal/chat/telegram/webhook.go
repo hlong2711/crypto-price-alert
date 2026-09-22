@@ -12,6 +12,7 @@ import (
 
 	"crypto-price-alert/internal/chat"
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/market"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -27,6 +28,7 @@ type Adapter struct {
 	tenantID         string
 	allowedSymbols   []string
 	allowedIntervals []domain.Interval
+	providers        market.ProviderResolver
 }
 
 // RegisterCommands publishes the bot command menu through Telegram.
@@ -39,8 +41,8 @@ func (a *Adapter) RegisterWebhook(ctx context.Context, webhookURL string) error 
 	return a.client.SetWebhook(ctx, webhookURL, a.webhookSecret)
 }
 
-func NewAdapter(client *APIClient, targets TargetRepository, events EventRepository, commands CommandService, sessions chat.SessionStore, webhookSecret, tenantID string, symbols []string, intervals []domain.Interval) (*Adapter, error) {
-	if client == nil || targets == nil || events == nil || commands == nil || sessions == nil || strings.TrimSpace(webhookSecret) == "" || strings.TrimSpace(tenantID) == "" {
+func NewAdapter(client *APIClient, targets TargetRepository, events EventRepository, commands CommandService, sessions chat.SessionStore, webhookSecret, tenantID string, symbols []string, intervals []domain.Interval, providers market.ProviderResolver) (*Adapter, error) {
+	if client == nil || targets == nil || events == nil || commands == nil || sessions == nil || providers == nil || strings.TrimSpace(webhookSecret) == "" || strings.TrimSpace(tenantID) == "" {
 		return nil, fmt.Errorf("invalid Telegram adapter settings")
 	}
 	return &Adapter{
@@ -53,6 +55,7 @@ func NewAdapter(client *APIClient, targets TargetRepository, events EventReposit
 		tenantID:         tenantID,
 		allowedSymbols:   append([]string(nil), symbols...),
 		allowedIntervals: append([]domain.Interval(nil), intervals...),
+		providers:        providers,
 	}, nil
 }
 
@@ -154,8 +157,18 @@ func (a *Adapter) process(c echo.Context, update Update) error {
 			if err != nil {
 				return err
 			}
-			text = symbolSelectionText(session)
-			keyboard = a.symbolKeyboard(session)
+
+			if provider, onlyOne := a.singleProvider(); onlyOne {
+				session.SelectedProvider = provider
+				if err := a.sessions.Update(ctx, session); err != nil {
+					return err
+				}
+				text = symbolSelectionText(session)
+				keyboard = a.symbolKeyboard(session)
+			} else {
+				text = providerSelectionText(session)
+				keyboard = a.providerKeyboard(session)
+			}
 		}
 		return a.client.SendMessage(ctx, update.Message.Chat.ID, text, keyboard)
 	}
@@ -210,9 +223,24 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 
 	var resp string = ""
 	switch {
+	case strings.HasPrefix(action, "provider:"):
+		provider := domain.MarketProvider(strings.TrimPrefix(action, "provider:"))
+		if !a.providerEnabled(provider) {
+			return fmt.Errorf("market provider %q is not enabled", provider)
+		}
+		session.SelectedProvider = provider
+		session.SelectedSymbols = a.supportedSymbols(session)
+		session.SelectedIntervals = a.supportedIntervals(session)
+		if err := a.commands.UpdateSession(ctx, command, session.SelectedProvider, session.SelectedSymbols, session.SelectedIntervals); err != nil {
+			return err
+		}
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, providerSelectionText(session), a.providerKeyboard(session)); err != nil {
+			return err
+		}
+
 	case strings.HasPrefix(action, "symbol:"):
 		session.SelectedSymbols = toggleString(session.SelectedSymbols, strings.TrimPrefix(action, "symbol:"))
-		if err := a.commands.UpdateSession(ctx, command, session.SelectedSymbols, session.SelectedIntervals); err != nil {
+		if err := a.commands.UpdateSession(ctx, command, session.SelectedProvider, session.SelectedSymbols, session.SelectedIntervals); err != nil {
 			return err
 		}
 		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, symbolSelectionText(session), a.symbolKeyboard(session)); err != nil {
@@ -222,7 +250,7 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 	case strings.HasPrefix(action, "interval:"):
 		value := domain.Interval(strings.TrimPrefix(action, "interval:"))
 		session.SelectedIntervals = toggleInterval(session.SelectedIntervals, value)
-		if err := a.commands.UpdateSession(ctx, command, session.SelectedSymbols, session.SelectedIntervals); err != nil {
+		if err := a.commands.UpdateSession(ctx, command, session.SelectedProvider, session.SelectedSymbols, session.SelectedIntervals); err != nil {
 			return err
 		}
 		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, intervalSelectionText(session), a.intervalKeyboard(session)); err != nil {
@@ -231,6 +259,16 @@ func (a *Adapter) processCallback(ctx context.Context, callback *CallbackQuery) 
 
 	case action == "next:intervals":
 		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, intervalSelectionText(session), a.intervalKeyboard(session)); err != nil {
+			return err
+		}
+
+	case action == "next:symbols":
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, symbolSelectionText(session), a.symbolKeyboard(session)); err != nil {
+			return err
+		}
+
+	case action == "back:providers":
+		if err := a.client.EditMessageText(ctx, callback.Message.Chat.ID, callback.Message.MessageID, providerSelectionText(session), a.providerKeyboard(session)); err != nil {
 			return err
 		}
 
@@ -296,26 +334,37 @@ func (a *Adapter) targetForChat(ctx context.Context, telegramChat Chat) (domain.
 func (a *Adapter) symbolKeyboard(session chat.ConfigSession) *InlineKeyboardMarkup {
 	keyboard := &InlineKeyboardMarkup{}
 
-	for _, symbol := range a.allowedSymbols {
+	for _, symbol := range a.availableSymbols(session.SelectedProvider) {
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
 			Text:         selectedText(slices.Contains(session.SelectedSymbols, symbol), symbol),
 			CallbackData: callbackData(session.SessionID, "symbol:"+symbol),
 		}})
 	}
-	keyboard.InlineKeyboard = append(
-		keyboard.InlineKeyboard,
-		[]InlineKeyboardButton{
-			{Text: "Next", CallbackData: callbackData(session.SessionID, "next:intervals")},
-			{Text: "Cancel", CallbackData: callbackData(session.SessionID, "cancel")},
+	controls := []InlineKeyboardButton{}
+	if _, onlyOne := a.singleProvider(); !onlyOne {
+		controls = append(controls, InlineKeyboardButton{
+			Text:         "Back",
+			CallbackData: callbackData(session.SessionID, "back:providers"),
+		})
+	}
+	controls = append(controls,
+		InlineKeyboardButton{
+			Text:         "Next",
+			CallbackData: callbackData(session.SessionID, "next:intervals"),
 		},
-	)
+		InlineKeyboardButton{
+			Text:         "Cancel",
+			CallbackData: callbackData(session.SessionID, "cancel"),
+		})
+
+	keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, controls)
 	return keyboard
 }
 
 func (a *Adapter) intervalKeyboard(session chat.ConfigSession) *InlineKeyboardMarkup {
 	keyboard := &InlineKeyboardMarkup{}
 
-	for _, interval := range a.allowedIntervals {
+	for _, interval := range a.availableIntervals(session.SelectedProvider) {
 		value := string(interval)
 		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
 			Text:         selectedText(slices.Contains(session.SelectedIntervals, interval), value),
@@ -333,6 +382,87 @@ func (a *Adapter) intervalKeyboard(session chat.ConfigSession) *InlineKeyboardMa
 	return keyboard
 }
 
+func (a *Adapter) providerKeyboard(session chat.ConfigSession) *InlineKeyboardMarkup {
+	keyboard := &InlineKeyboardMarkup{}
+	for _, provider := range a.providers.Enabled() {
+		value := string(provider)
+		keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{{
+			Text:         selectedText(session.SelectedProvider == provider, value),
+			CallbackData: callbackData(session.SessionID, "provider:"+value),
+		}})
+	}
+	keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, []InlineKeyboardButton{
+		{Text: "Next", CallbackData: callbackData(session.SessionID, "next:symbols")},
+		{Text: "Cancel", CallbackData: callbackData(session.SessionID, "cancel")}})
+	return keyboard
+}
+
+func (a *Adapter) providerEnabled(provider domain.MarketProvider) bool {
+	return slices.Contains(a.providers.Enabled(), provider)
+}
+
+func (a *Adapter) singleProvider() (domain.MarketProvider, bool) {
+	providers := a.providers.Enabled()
+	if len(providers) != 1 {
+		return "", false
+	}
+	return providers[0], true
+}
+
+func (a *Adapter) availableSymbols(provider domain.MarketProvider) []string {
+	result := make([]string, 0, len(a.allowedSymbols))
+	for _, symbol := range a.allowedSymbols {
+		for _, interval := range a.allowedIntervals {
+			if a.providers.Supports(provider, symbol, interval) {
+				result = append(result, symbol)
+				break
+			}
+		}
+	}
+	return result
+}
+
+func (a *Adapter) availableIntervals(provider domain.MarketProvider) []domain.Interval {
+	result := make([]domain.Interval, 0, len(a.allowedIntervals))
+	for _, interval := range a.allowedIntervals {
+		for _, symbol := range a.allowedSymbols {
+			if a.providers.Supports(provider, symbol, interval) {
+				result = append(result, interval)
+				break
+			}
+		}
+	}
+	return result
+}
+
+func (a *Adapter) supportedSymbols(session chat.ConfigSession) []string {
+	return filterStrings(session.SelectedSymbols, a.availableSymbols(session.SelectedProvider))
+}
+
+func (a *Adapter) supportedIntervals(session chat.ConfigSession) []domain.Interval {
+	return filterIntervals(session.SelectedIntervals, a.availableIntervals(session.SelectedProvider))
+}
+
+func filterStrings(values, allowed []string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if slices.Contains(allowed, value) {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func filterIntervals(values, allowed []domain.Interval) []domain.Interval {
+	result := make([]domain.Interval, 0, len(values))
+	for _, value := range values {
+		if slices.Contains(allowed, value) {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
 // emptyInlineKeyboard clears the inline keyboard on an edited message.
 // Telegram removes buttons when editMessageText carries an empty inline_keyboard.
 func emptyInlineKeyboard() *InlineKeyboardMarkup {
@@ -341,6 +471,10 @@ func emptyInlineKeyboard() *InlineKeyboardMarkup {
 
 func symbolSelectionText(session chat.ConfigSession) string {
 	return fmt.Sprintf("Select symbols for alerts.\nSelected: %s", joinSelectedStrings(session.SelectedSymbols))
+}
+
+func providerSelectionText(session chat.ConfigSession) string {
+	return fmt.Sprintf("Select a market provider.\nSelected: %s", session.SelectedProvider)
 }
 
 func intervalSelectionText(session chat.ConfigSession) string {

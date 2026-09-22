@@ -56,9 +56,14 @@ func NewCoinMarketCapProvider(baseURL, apiKey, unit string, symbols map[string]C
 		mappings[symbol] = mapping
 	}
 	return &CoinMarketCapProvider{
-		baseURL: baseURL, apiKey: apiKey, unit: strings.ToLower(unit), symbols: mappings,
-		client: client, maxAttempts: maxAttempts, backoff: backoff,
-		semaphore: make(chan struct{}, concurrency),
+		baseURL:     baseURL,
+		apiKey:      apiKey,
+		unit:        strings.ToLower(unit),
+		symbols:     mappings,
+		client:      client,
+		maxAttempts: maxAttempts,
+		backoff:     backoff,
+		semaphore:   make(chan struct{}, concurrency),
 	}, nil
 }
 
@@ -181,7 +186,8 @@ func (p *CoinMarketCapProvider) request(ctx context.Context, requestURL, symbol 
 		}
 		candle := domain.Candle{
 			Symbol: symbol, Open: values[0], High: values[1], Low: values[2],
-			Close: values[3], Volume: values[4], OpenTime: openTime, CloseTime: openTime.Add(duration),
+			Close: values[3], Volume: values[4],
+			OpenTime: openTime, CloseTime: openTime.Add(duration),
 		}
 		if err := candle.Validate(); err != nil {
 			return domain.Candle{}, false, fmt.Errorf("validate CoinMarketCap candle: %w", err)

@@ -14,6 +14,7 @@ type MarketDataProvider interface {
 type ProviderResolver interface {
 	Get(domain.MarketProvider) (MarketDataProvider, error)
 	Supports(domain.MarketProvider, string, domain.Interval) bool
+	Enabled() []domain.MarketProvider
 }
 
 type StaticProviderResolver struct {
@@ -36,4 +37,11 @@ func (r *StaticProviderResolver) Get(provider domain.MarketProvider) (MarketData
 
 func (r *StaticProviderResolver) Supports(provider domain.MarketProvider, _ string, _ domain.Interval) bool {
 	return r != nil && r.provider != nil && provider == domain.MarketProviderBinance
+}
+
+func (r *StaticProviderResolver) Enabled() []domain.MarketProvider {
+	if r == nil || r.provider == nil {
+		return nil
+	}
+	return []domain.MarketProvider{domain.MarketProviderBinance}
 }

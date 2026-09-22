@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/market"
 	"crypto-price-alert/internal/repository"
 )
 
@@ -55,7 +57,7 @@ func (f *fakeConfigRepository) SetAlertConfigEnabled(context.Context, string, bo
 func newTestService(t *testing.T) (*Service, *fakeConfigRepository) {
 	t.Helper()
 	configs := &fakeConfigRepository{}
-	service, err := NewService(fakeTargetRepository{}, configs, []string{"BTCUSDT", "ETHUSDT"}, []domain.Interval{domain.Interval1H, domain.Interval4H}, 2, 10)
+	service, err := NewService(fakeTargetRepository{}, configs, []string{"BTCUSDT", "ETHUSDT"}, []domain.Interval{domain.Interval1H, domain.Interval4H}, 2, 10, market.NewStaticProviderResolver(fakeMarketProvider{}), domain.MarketProviderBinance)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +66,7 @@ func newTestService(t *testing.T) (*Service, *fakeConfigRepository) {
 
 func TestReplaceConfigNormalizesAndValidates(t *testing.T) {
 	service, configs := newTestService(t)
-	result, err := service.ReplaceConfig(context.Background(), "target", []string{" btcusdt "}, []domain.Interval{domain.Interval1H}, true, "creator", 0)
+	result, err := service.ReplaceConfig(context.Background(), "target", domain.MarketProviderBinance, []string{" btcusdt "}, []domain.Interval{domain.Interval1H}, true, "creator", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +88,7 @@ func TestReplaceConfigRejectsInvalidValues(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if _, err := service.ReplaceConfig(context.Background(), "target", tt.symbols, tt.intervals, true, "creator", 0); err == nil {
+			if _, err := service.ReplaceConfig(context.Background(), "target", domain.MarketProviderBinance, tt.symbols, tt.intervals, true, "creator", 0); err == nil {
 				t.Fatal("expected validation error")
 			}
 		})
@@ -95,7 +97,7 @@ func TestReplaceConfigRejectsInvalidValues(t *testing.T) {
 
 func TestGetOrCreateConfigCreatesDisabledDefault(t *testing.T) {
 	configs := &fakeConfigRepository{missing: true}
-	service, err := NewService(fakeTargetRepository{}, configs, []string{"BTCUSDT", "ETHUSDT"}, []domain.Interval{domain.Interval1H, domain.Interval4H}, 2, 10)
+	service, err := NewService(fakeTargetRepository{}, configs, []string{"BTCUSDT", "ETHUSDT"}, []domain.Interval{domain.Interval1H, domain.Interval4H}, 2, 10, market.NewStaticProviderResolver(fakeMarketProvider{}), domain.MarketProviderBinance)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,4 +108,21 @@ func TestGetOrCreateConfigCreatesDisabledDefault(t *testing.T) {
 	if config.Enabled || config.TargetID != "target" || len(config.Symbols) != 1 || config.Symbols[0] != "BTCUSDT" || len(config.Intervals) != 1 || config.Intervals[0] != domain.Interval1H {
 		t.Fatalf("unexpected created config: %+v", config)
 	}
+}
+
+func TestReplaceConfigFallsBackWhenRequestedProviderIsDisabled(t *testing.T) {
+	service, configs := newTestService(t)
+	_, err := service.ReplaceConfig(context.Background(), "target", domain.MarketProviderCoinMarketCap, []string{"BTCUSDT"}, []domain.Interval{domain.Interval1H}, true, "creator", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if configs.replaced.MarketProvider != domain.MarketProviderBinance {
+		t.Fatalf("expected fallback provider %q, got %q", domain.MarketProviderBinance, configs.replaced.MarketProvider)
+	}
+}
+
+type fakeMarketProvider struct{}
+
+func (fakeMarketProvider) GetKline(context.Context, string, domain.Interval, time.Time, time.Time) (domain.Candle, error) {
+	return domain.Candle{}, nil
 }
