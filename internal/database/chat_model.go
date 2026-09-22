@@ -23,11 +23,12 @@ type AlertTarget struct {
 func (AlertTarget) TableName() string { return "alert_targets" }
 
 type AlertConfig struct {
-	TargetID  uuid.UUID `gorm:"type:uuid;primaryKey"`
-	Enabled   bool      `gorm:"not null;default:false"`
-	Version   int64     `gorm:"not null;default:0"`
-	UpdatedBy string    `gorm:"type:varchar(128);not null"`
-	UpdatedAt time.Time `gorm:"not null"`
+	TargetID       uuid.UUID             `gorm:"type:uuid;primaryKey"`
+	MarketProvider domain.MarketProvider `gorm:"type:varchar(32);not null"`
+	Enabled        bool                  `gorm:"not null;default:false"`
+	Version        int64                 `gorm:"not null;default:0"`
+	UpdatedBy      string                `gorm:"type:varchar(128);not null"`
+	UpdatedAt      time.Time             `gorm:"not null"`
 }
 
 func (AlertConfig) TableName() string { return "alert_configs" }

@@ -57,12 +57,13 @@ func (e *Executor) Execute(ctx context.Context, now time.Time, interval domain.I
 	items := make([]item, 0, len(e.symbols))
 	for _, symbol := range e.symbols {
 		job := domain.Job{
-			ID:          uuid.New().String(),
-			Symbol:      symbol,
-			Interval:    interval,
-			PeriodStart: period.Start,
-			PeriodEnd:   period.End,
-			Status:      domain.JobPending}
+			ID:             uuid.New().String(),
+			MarketProvider: domain.MarketProviderBinance,
+			Symbol:         symbol,
+			Interval:       interval,
+			PeriodStart:    period.Start,
+			PeriodEnd:      period.End,
+			Status:         domain.JobPending}
 		created, isNew, err := e.repository.CreateIfNotExists(ctx, job)
 		if err != nil {
 			return err

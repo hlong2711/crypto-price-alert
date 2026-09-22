@@ -39,17 +39,18 @@ func (r *PostgresRepository) CreateIfNotExists(ctx context.Context, job domain.J
 		return domain.Job{}, false, err
 	}
 	model := database.NotificationJob{
-		ID:           id,
-		TargetID:     targetID,
-		Symbol:       job.Symbol,
-		Interval:     job.Interval,
-		PeriodStart:  job.PeriodStart,
-		PeriodEnd:    job.PeriodEnd,
-		Status:       job.Status,
-		ErrorMessage: job.ErrorMessage,
-		SentAt:       job.SentAt,
-		CreatedAt:    job.CreatedAt,
-		UpdatedAt:    job.UpdatedAt,
+		ID:             id,
+		TargetID:       targetID,
+		MarketProvider: job.MarketProvider,
+		Symbol:         job.Symbol,
+		Interval:       job.Interval,
+		PeriodStart:    job.PeriodStart,
+		PeriodEnd:      job.PeriodEnd,
+		Status:         job.Status,
+		ErrorMessage:   job.ErrorMessage,
+		SentAt:         job.SentAt,
+		CreatedAt:      job.CreatedAt,
+		UpdatedAt:      job.UpdatedAt,
 	}
 	if model.CreatedAt.IsZero() {
 		model.CreatedAt = time.Now().UTC()
@@ -64,8 +65,9 @@ func (r *PostgresRepository) CreateIfNotExists(ctx context.Context, job domain.J
 	}
 	if result.RowsAffected == 0 {
 		var existing database.NotificationJob
-		if err := r.db.WithContext(ctx).Where("target_id = ? AND symbol = ? AND interval = ? AND period_start = ?",
+		if err := r.db.WithContext(ctx).Where("target_id = ? AND market_provider = ? AND symbol = ? AND interval = ? AND period_start = ?",
 			model.TargetID,
+			job.MarketProvider,
 			job.Symbol,
 			job.Interval,
 			job.PeriodStart).First(&existing).Error; err != nil {
@@ -131,17 +133,18 @@ func (r *PostgresRepository) updateStatus(ctx context.Context,
 
 func toDomain(job database.NotificationJob) domain.Job {
 	return domain.Job{
-		ID:           job.ID.String(),
-		TargetID:     job.TargetID.String(),
-		Symbol:       job.Symbol,
-		Interval:     job.Interval,
-		PeriodStart:  job.PeriodStart,
-		PeriodEnd:    job.PeriodEnd,
-		Status:       job.Status,
-		ErrorMessage: job.ErrorMessage,
-		SentAt:       job.SentAt,
-		CreatedAt:    job.CreatedAt,
-		UpdatedAt:    job.UpdatedAt,
+		ID:             job.ID.String(),
+		TargetID:       job.TargetID.String(),
+		MarketProvider: job.MarketProvider,
+		Symbol:         job.Symbol,
+		Interval:       job.Interval,
+		PeriodStart:    job.PeriodStart,
+		PeriodEnd:      job.PeriodEnd,
+		Status:         job.Status,
+		ErrorMessage:   job.ErrorMessage,
+		SentAt:         job.SentAt,
+		CreatedAt:      job.CreatedAt,
+		UpdatedAt:      job.UpdatedAt,
 	}
 }
 
@@ -225,11 +228,12 @@ func (r *PostgresRepository) CreateAlertConfig(ctx context.Context, config domai
 		return fmt.Errorf("parse target ID: %w", err)
 	}
 	model := database.AlertConfig{
-		TargetID:  targetID,
-		Enabled:   config.Enabled,
-		Version:   config.Version,
-		UpdatedBy: config.UpdatedBy,
-		UpdatedAt: config.UpdatedAt,
+		TargetID:       targetID,
+		MarketProvider: config.MarketProvider,
+		Enabled:        config.Enabled,
+		Version:        config.Version,
+		UpdatedBy:      config.UpdatedBy,
+		UpdatedAt:      config.UpdatedAt,
 	}
 	if model.UpdatedAt.IsZero() {
 		model.UpdatedAt = time.Now().UTC()
@@ -288,10 +292,11 @@ func (r *PostgresRepository) ReplaceAlertConfig(ctx context.Context, config doma
 		}
 		updatedAt := time.Now().UTC()
 		updates := map[string]any{
-			"enabled":    config.Enabled,
-			"version":    current.Version + 1,
-			"updated_by": config.UpdatedBy,
-			"updated_at": updatedAt,
+			"market_provider": config.MarketProvider,
+			"enabled":         config.Enabled,
+			"version":         current.Version + 1,
+			"updated_by":      config.UpdatedBy,
+			"updated_at":      updatedAt,
 		}
 		updateResult := tx.Model(&database.AlertConfig{}).Where("target_id = ? AND version = ?", targetID, expectedVersion).Updates(updates)
 		if updateResult.Error != nil {

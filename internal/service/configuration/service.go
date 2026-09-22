@@ -123,8 +123,12 @@ func (s *Service) ReplaceConfig(
 	if strings.TrimSpace(updatedBy) == "" {
 		return domain.AlertConfig{}, fmt.Errorf("updated_by is required")
 	}
+	provider := domain.MarketProviderBinance
+	if current, getErr := s.configs.GetAlertConfig(ctx, targetID); getErr == nil && current.MarketProvider != "" {
+		provider = current.MarketProvider
+	}
 	return s.configs.ReplaceAlertConfig(ctx, domain.AlertConfig{
-		TargetID:  targetID,
+		TargetID: targetID, MarketProvider: provider,
 		Enabled:   enabled,
 		Symbols:   normalizedSymbols,
 		Intervals: normalizedIntervals,
@@ -146,7 +150,7 @@ func (s *Service) CreateConfig(ctx context.Context, targetID string, symbols []s
 		return fmt.Errorf("updated_by is required")
 	}
 	return s.configs.CreateAlertConfig(ctx, domain.AlertConfig{
-		TargetID:  targetID,
+		TargetID: targetID, MarketProvider: domain.MarketProviderBinance,
 		Enabled:   enabled,
 		Symbols:   normalizedSymbols,
 		Intervals: normalizedIntervals,

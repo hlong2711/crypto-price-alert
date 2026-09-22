@@ -35,11 +35,12 @@ type RunResult struct {
 // AlertService runs the core job logic: fetch klines, build message, send notifications.
 // It intentionally does NOT touch the scheduler or the job repository.
 type AlertService struct {
-	market         market.MarketDataProvider
-	notifiers      []notification.Notifier
-	notifierNames  []string
-	defaultSymbols []string
-	location       *time.Location
+	providers       market.ProviderResolver
+	defaultProvider domain.MarketProvider
+	notifiers       []notification.Notifier
+	notifierNames   []string
+	defaultSymbols  []string
+	location        *time.Location
 }
 
 func NewAlertService(
@@ -56,12 +57,33 @@ func NewAlertService(
 		return nil, fmt.Errorf("notifier names length must match notifiers")
 	}
 	return &AlertService{
-		market:         provider,
-		notifiers:      notifiers,
-		notifierNames:  notifierNames,
-		defaultSymbols: defaultSymbols,
-		location:       location,
+		providers:       market.NewStaticProviderResolver(provider),
+		defaultProvider: domain.MarketProviderBinance,
+		notifiers:       notifiers,
+		notifierNames:   notifierNames,
+		defaultSymbols:  defaultSymbols,
+		location:        location,
 	}, nil
+}
+
+func NewAlertServiceWithRegistry(
+	providers market.ProviderResolver,
+	notifiers []notification.Notifier,
+	notifierNames []string,
+	defaultSymbols []string,
+	defaultProvider domain.MarketProvider,
+	location *time.Location,
+) (*AlertService, error) {
+	if providers == nil || len(notifiers) == 0 || len(defaultSymbols) == 0 || location == nil {
+		return nil, fmt.Errorf("invalid alert service settings")
+	}
+	if err := defaultProvider.Validate(); err != nil {
+		return nil, err
+	}
+	if len(notifierNames) != 0 && len(notifierNames) != len(notifiers) {
+		return nil, fmt.Errorf("notifier names length must match notifiers")
+	}
+	return &AlertService{providers: providers, defaultProvider: defaultProvider, notifiers: notifiers, notifierNames: notifierNames, defaultSymbols: defaultSymbols, location: location}, nil
 }
 
 func (s *AlertService) DefaultSymbols() []string {
@@ -72,15 +94,39 @@ func (s *AlertService) DefaultSymbols() []string {
 
 // Run fetches klines for period, builds the message and sends it unless dryRun.
 func (s *AlertService) Run(ctx context.Context, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
-	return s.run(ctx, nil, interval, period, symbols, dryRun)
+	return s.RunWithProvider(ctx, s.defaultProvider, interval, period, symbols, dryRun)
+}
+
+func (s *AlertService) RunWithProvider(ctx context.Context, providerName domain.MarketProvider, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
+	provider, err := s.providers.Get(providerName)
+	if err != nil {
+		return RunResult{}, err
+	}
+	if len(symbols) == 0 {
+		symbols = s.DefaultSymbols()
+	}
+	for _, symbol := range symbols {
+		if !s.providers.Supports(providerName, symbol, interval) {
+			return RunResult{}, fmt.Errorf("market provider %q does not support %s/%s", providerName, symbol, interval)
+		}
+	}
+	return s.run(ctx, provider, nil, interval, period, symbols, dryRun)
 }
 
 // RunForTarget runs an alert and routes its notification to the supplied alert target.
 func (s *AlertService) RunForTarget(ctx context.Context, target domain.AlertTarget, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
-	return s.run(ctx, &target, interval, period, symbols, dryRun)
+	return s.RunWithProviderForTarget(ctx, s.defaultProvider, target, interval, period, symbols, dryRun)
 }
 
-func (s *AlertService) run(ctx context.Context, target *domain.AlertTarget, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
+func (s *AlertService) RunWithProviderForTarget(ctx context.Context, providerName domain.MarketProvider, target domain.AlertTarget, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
+	provider, err := s.providers.Get(providerName)
+	if err != nil {
+		return RunResult{}, err
+	}
+	return s.run(ctx, provider, &target, interval, period, symbols, dryRun)
+}
+
+func (s *AlertService) run(ctx context.Context, provider market.MarketDataProvider, target *domain.AlertTarget, interval domain.Interval, period domain.Period, symbols []string, dryRun bool) (RunResult, error) {
 	if err := interval.Validate(); err != nil {
 		return RunResult{}, err
 	}
@@ -94,7 +140,7 @@ func (s *AlertService) run(ctx context.Context, target *domain.AlertTarget, inte
 	priceResults := make([]notification.PriceResult, 0, len(symbols))
 	symbolResults := make([]SymbolResult, 0, len(symbols))
 	for _, symbol := range symbols {
-		candle, err := s.market.GetKline(ctx, symbol, interval, period.Start, period.End)
+		candle, err := provider.GetKline(ctx, symbol, interval, period.Start, period.End)
 		if err != nil {
 			priceResults = append(priceResults, notification.PriceResult{
 				Change:      domain.PriceChange{Symbol: symbol},

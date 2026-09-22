@@ -3,6 +3,8 @@ package database
 import (
 	"fmt"
 
+	"crypto-price-alert/internal/domain"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -25,7 +27,6 @@ func Migrate(db *gorm.DB) error {
 
 	if err := db.AutoMigrate(
 		&AlertTarget{},
-		&AlertConfig{},
 		&AlertConfigSymbol{},
 		&AlertConfigInterval{},
 		&InboundEvent{},
@@ -33,7 +34,31 @@ func Migrate(db *gorm.DB) error {
 		return err
 	}
 
+	if db.Migrator().HasTable(&AlertConfig{}) {
+		if err := db.Exec("ALTER TABLE alert_configs ADD COLUMN IF NOT EXISTS market_provider varchar(32)").Error; err != nil {
+			return fmt.Errorf("add alert config market provider: %w", err)
+		}
+		if err := db.Exec("UPDATE alert_configs SET market_provider = ? WHERE market_provider IS NULL", domain.MarketProviderBinance).Error; err != nil {
+			return fmt.Errorf("backfill alert config market provider: %w", err)
+		}
+		if err := db.Exec("ALTER TABLE alert_configs ALTER COLUMN market_provider SET NOT NULL").Error; err != nil {
+			return fmt.Errorf("require alert config market provider: %w", err)
+		}
+	}
+	if err := db.AutoMigrate(&AlertConfig{}); err != nil {
+		return err
+	}
+
 	if db.Migrator().HasTable(&NotificationJob{}) {
+		if err := db.Exec("ALTER TABLE notification_jobs ADD COLUMN IF NOT EXISTS market_provider varchar(32)").Error; err != nil {
+			return fmt.Errorf("add notification job market provider: %w", err)
+		}
+		if err := db.Exec("UPDATE notification_jobs SET market_provider = ? WHERE market_provider IS NULL", domain.MarketProviderBinance).Error; err != nil {
+			return fmt.Errorf("backfill notification job market provider: %w", err)
+		}
+		if err := db.Exec("ALTER TABLE notification_jobs ALTER COLUMN market_provider SET NOT NULL").Error; err != nil {
+			return fmt.Errorf("require notification job market provider: %w", err)
+		}
 		if err := db.Exec("ALTER TABLE notification_jobs ADD COLUMN IF NOT EXISTS target_id uuid").Error; err != nil {
 			return fmt.Errorf("add notification job target ID: %w", err)
 		}
@@ -46,12 +71,20 @@ func Migrate(db *gorm.DB) error {
 		if err := db.Exec("DROP INDEX IF EXISTS idx_notification_jobs_key").Error; err != nil {
 			return fmt.Errorf("drop legacy notification job index: %w", err)
 		}
+		if err := db.Exec("DROP INDEX IF EXISTS idx_notification_jobs_target_key").Error; err != nil {
+			return fmt.Errorf("drop notification job index: %w", err)
+		}
 	}
 
 	if err := db.AutoMigrate(
 		&NotificationJob{},
 	); err != nil {
 		return err
+	}
+	if db.Migrator().HasTable(&NotificationJob{}) {
+		if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_notification_jobs_target_key ON notification_jobs (target_id, market_provider, symbol, interval, period_start)").Error; err != nil {
+			return fmt.Errorf("create notification job index: %w", err)
+		}
 	}
 
 	return nil

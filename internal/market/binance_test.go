@@ -88,3 +88,22 @@ func TestBinanceProviderDoesNotRetryClientError(t *testing.T) {
 		t.Fatalf("calls=%d, want 1", calls.Load())
 	}
 }
+
+func TestBinanceProviderMapsLogicalSymbol(t *testing.T) {
+	var requestSymbol string
+	provider, err := NewBinanceProvider("http://binance.test", &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		requestSymbol = r.URL.Query().Get("symbol")
+		return response(http.StatusOK, klineJSON), nil
+	})}, 1, time.Millisecond, 1, map[string]string{"BTC": "BTCUSDT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.UnixMilli(1756681200000)
+	candle, err := provider.GetKline(context.Background(), "BTC", domain.Interval1H, start, start.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requestSymbol != "BTCUSDT" || candle.Symbol != "BTC" {
+		t.Fatalf("request symbol=%q candle=%q", requestSymbol, candle.Symbol)
+	}
+}

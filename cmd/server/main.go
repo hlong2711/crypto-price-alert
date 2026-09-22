@@ -67,15 +67,20 @@ func main() {
 	}
 	defer stopNotificationJobCleanup()
 
-	provider, err := market.NewBinanceProvider(
-		"",
+	registry, err := market.NewProviderRegistry(
+		cfg.Market,
 		&http.Client{Timeout: 10 * time.Second},
 		cfg.Retry.MaxAttempts,
 		cfg.Retry.InitialBackoff,
 		cfg.Concurrency.MarketRequests,
 	)
 	if err != nil {
-		logger.Error("failed to initialize market provider", "error", err)
+		logger.Error("failed to initialize market provider registry", "error", err)
+		os.Exit(1)
+	}
+	_, provider, err := registry.Default()
+	if err != nil {
+		logger.Error("failed to resolve default market provider", "error", err)
 		os.Exit(1)
 	}
 
@@ -100,7 +105,7 @@ func main() {
 		logger.Error("failed to initialize scheduler executor", "error", err)
 		os.Exit(1)
 	}
-	targetExecutor, err := scheduler.NewTargetExecutor(periods, provider, jobRepo, jobRepo, jobRepo, targetNotifiers, executor, location)
+	targetExecutor, err := scheduler.NewTargetExecutorWithResolver(periods, registry, jobRepo, jobRepo, jobRepo, targetNotifiers, executor, location)
 	if err != nil {
 		logger.Error("failed to initialize target scheduler executor", "error", err)
 		os.Exit(1)
@@ -127,7 +132,7 @@ func main() {
 	}()
 	logger.Info("scheduler started", "timezone", cfg.App.Timezone)
 
-	alertService, err := service.NewAlertService(provider, notifiers, notifierNames(cfg), cfg.Market.Symbols, location)
+	alertService, err := service.NewAlertServiceWithRegistry(registry, notifiers, notifierNames(cfg), cfg.Market.Symbols, cfg.Market.DefaultProvider, location)
 	if err != nil {
 		logger.Error("failed to initialize alert service", "error", err)
 		os.Exit(1)
