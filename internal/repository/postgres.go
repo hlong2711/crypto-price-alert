@@ -84,6 +84,28 @@ func (r *PostgresRepository) MarkFailed(ctx context.Context, id string, reason s
 	return r.updateStatus(ctx, id, domain.JobFailed, reason, nil)
 }
 
+func (r *PostgresRepository) DeleteNotificationJobsUpdatedBefore(ctx context.Context, cutoff time.Time, limit int) (int64, error) {
+	if limit < 1 {
+		return 0, fmt.Errorf("cleanup limit must be positive")
+	}
+
+	cutoff = cutoff.UTC()
+	candidates := r.db.WithContext(ctx).
+		Model(&database.NotificationJob{}).
+		Select("id").
+		Where("updated_at < ?", cutoff).
+		Order("updated_at ASC").
+		Limit(limit)
+
+	result := r.db.WithContext(ctx).
+		Where("updated_at < ? AND id IN (?)", cutoff, candidates).
+		Delete(&database.NotificationJob{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("delete stale notification jobs: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 func (r *PostgresRepository) updateStatus(ctx context.Context,
 	id string,
 	status domain.JobStatus,

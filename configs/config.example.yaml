@@ -5,6 +5,8 @@ app:
 
 database:
   url: "${DATABASE_URL}"
+  # Delete notification_jobs not updated within this duration. Set 0s to disable.
+  notification_jobs_retention: 720h
 
 market:
   provider: binance

@@ -18,7 +18,7 @@ type NotificationJob struct {
 	ErrorMessage string           `gorm:"type:text"`
 	SentAt       *time.Time       `gorm:""`
 	CreatedAt    time.Time        `gorm:"not null"`
-	UpdatedAt    time.Time        `gorm:"not null"`
+	UpdatedAt    time.Time        `gorm:"not null;index:idx_notification_jobs_updated_at"`
 }
 
 func (NotificationJob) TableName() string { return "notification_jobs" }
