@@ -21,7 +21,7 @@ The first release remains one provider per target—not one provider per symbol 
 | `internal/repository/*` | Reads/writes configs and jobs without provider. | Round-trip provider, update optimistic replacements, and query conflicts with provider included. |
 | `internal/scheduler/target_executor.go` | Dedupe cache key is symbol only and fetches from one provider. | Fetch by `(provider, symbol)` and group/dedupe only within the same provider. |
 | `internal/service/alert.go`, API handler | One globally injected provider. | Resolve a requested/default provider for non-target API runs; target runs use the provider saved in the target config. |
-| Chat session, Telegram, Slack | Configuration flow selects symbols then intervals. | Add provider selection; filter selectable symbols/intervals to the selected provider's compatible subset while retaining global allow-lists as the source of truth. |
+| Chat session, Telegram, Slack | Configuration flow selects symbols then intervals and assumes Binance. | Carry a selected provider through the session and save it; offer only enabled providers and filter selectable symbols/intervals to the selected provider's compatible subset. If a submitted or legacy session names a disabled provider, use `default_provider` before creating/replacing its config. |
 
 ## Configuration model
 
@@ -71,10 +71,10 @@ market:
 3. Require every enabled provider mapping key to be in `market.symbols`; reject unknown and duplicate keys.
 4. At startup, create each adapter and expose its supported intervals. A provider may serve only a subset of the shared interval list.
 5. CMC mappings require `platform` and `address`; Binance mappings require an exchange symbol.
-6. A target configuration is valid only when its one selected provider is enabled and every selected shared symbol and interval is available through that provider.
+6. A target configuration is persisted with exactly one enabled provider. Chat configuration resolves a missing, unknown, or disabled requested provider to `default_provider` before validating and persisting; it must then validate every selected shared symbol and interval against that effective provider. This makes provider disablement safe for an in-flight or legacy chat session instead of creating an unusable alert config.
 7. An API caller may optionally choose a provider; absent one, use `default_provider`. Do not infer provider from the symbol.
 
-The shared allow-lists stay shared. Provider mappings/capabilities are a second eligibility layer, so chat displays only the valid intersection for the provider that the user selected.
+The shared allow-lists stay shared. Provider mappings/capabilities are a second eligibility layer, so chat displays only the valid intersection for the effective provider. Provider choice must never be inferred from a symbol.
 
 ## Implementation blueprint
 
@@ -249,13 +249,13 @@ Tests: two targets on different providers fetch twice and receive the correct so
 
 ### 7. Target configuration service and chat state machine
 
-Add MarketProvider to ConfigSession, cloneSession, and NewConfigSession. Change ConfigurationService ReplaceConfig and UpdateSession signatures to include provider. configuration.Service validates registry.Supports for every selected symbol and interval before persistence.
+Add MarketProvider to ConfigSession, cloneSession, and NewConfigSession. Change ConfigurationService ReplaceConfig and UpdateSession signatures to include provider. `configuration.Service` receives the provider registry and `market.default_provider`; it resolves an absent, unknown, or disabled session provider to the default provider, then validates `registry.Supports` for every selected symbol and interval before persistence. A newly created config always starts with `default_provider`.
 
 Change the interaction sequence to provider -> symbols -> intervals -> save. On provider change, retain only selected symbols/intervals supported by the new provider; do not carry incompatible choices to Save.
 
-Telegram changes: add a provider keyboard and provider callback, change Next/Back actions to provider-to-symbols-to-intervals, and include provider in the final text. Slack changes: add a provider selector/action value, regenerate blocks using the provider-compatible subsets, and include provider in saved/status output.
+Telegram changes: add a provider keyboard and provider callback, change Next/Back actions to provider-to-symbols-to-intervals, and include provider in the final text. When exactly one provider is enabled, preselect it and begin at symbols; otherwise begin at provider selection. Slack changes: add a provider selector/action value, regenerate blocks using the provider-compatible subsets after each provider action, and include provider in saved/status output.
 
-Tests: new session defaults to default provider; provider toggle changes eligible lists; incompatible selections are removed; back/cancel preserves valid state; save persists provider; stale session version still fails; Telegram and Slack callbacks cannot select a disabled provider or unsupported symbol/interval.
+Tests: new session defaults to default provider; a disabled/unknown session provider falls back to the default on save; provider toggle changes eligible lists; incompatible selections are removed; back/cancel preserves valid state; save persists the effective provider; stale session version still fails; Telegram and Slack callbacks cannot select a disabled provider or unsupported symbol/interval.
 
 ### 8. Documentation, staging verification, and release
 
@@ -269,7 +269,7 @@ Deploy schema migration first, then the registry/adapters binary with CMC disabl
 
 Add `MarketProvider` to `domain.AlertConfig`, `database.AlertConfig`, repository conversions, and config validation. It is one non-null column, not a child table; the existing one-row-per-target design already enforces one provider per target.
 
-Update `configuration.Service` signatures so `CreateConfig` and `ReplaceConfig` accept a provider. Its first-time default uses `market.default_provider`. Preserve the selected provider through pauses/enables and optimistic version updates.
+Update `configuration.Service` signatures so `CreateConfig` and `ReplaceConfig` accept a provider. Its first-time default uses `market.default_provider`. Before either operation persists a provider, resolve a missing, unknown, or disabled value to that default and validate symbols/intervals against the resolved provider. Preserve the selected provider through pauses/enables and optimistic version updates.
 
 Update `chat.ConfigSession` with `SelectedMarketProvider`. The interactive flow becomes:
 
@@ -278,7 +278,7 @@ Update `chat.ConfigSession` with `SelectedMarketProvider`. The interactive flow 
 3. Choose compatible intervals from the shared allow-list.
 4. Review, save, enable/pause.
 
-Add back/cancel behavior that preserves selections. Telegram keyboard and Slack Block Kit values must include the provider selection action. The status/readback message must display the selected market provider.
+Add back/cancel behavior that preserves selections. Telegram keyboard and Slack Block Kit values must include the provider selection action. On provider change, remove previously selected symbols/intervals that are not supported by the new provider. The status/readback message must display the persisted, effective market provider.
 
 For `POST /api/v1/alerts/run`, add an optional `provider` request field. It selects a configured provider; omit it to use `default_provider`. Keep the API's `symbols` field expressed in shared logical IDs.
 
@@ -371,9 +371,9 @@ GORM `AutoMigrate` alone is insufficient for safely replacing an existing unique
 
 - Two targets selecting different providers fetch from their own adapter and receive no cross-provider data.
 - Two targets selecting the same provider and symbol share one fetch; same symbol under different providers results in two fetches.
-- Missing/disabled provider or unsupported selected option yields an unavailable result/error without delivering a mismatched candle.
+- Scheduler/API execution rejects an unavailable or unsupported persisted/requested provider selection without delivering a mismatched candle. Chat creation/replacement is the exception: it falls back from a missing/disabled provider to `default_provider` before persistence.
 - Legacy/no-target execution and API omitted-provider runs use `default_provider`; explicit valid/invalid provider API cases are covered.
-- Telegram and Slack: provider selector renders first, provider selection filters available shared symbols/intervals, back/cancel preserve state, saved configuration stores provider, and status output includes it.
+- Telegram and Slack: enabled provider choices are exposed (Telegram may skip the provider screen when only one is enabled); provider selection filters available shared symbols/intervals; disabled provider submissions fall back to the default; back/cancel preserve state; saved configuration stores the effective provider; and status output includes it.
 - Existing notification formatting and delivery tests continue to pass with provider-neutral `PriceChange` values.
 
 ### Verification commands
@@ -393,7 +393,7 @@ Run `go test ./...` after each implementation slice. Add only opt-in live CMC sm
 
 ## Acceptance criteria
 
-- An enabled target has exactly one persisted market provider and can select only shared symbols/intervals that provider supports.
+- An enabled target has exactly one persisted, enabled market provider and can select only shared symbols/intervals that provider supports. A chat-created/replaced config that names a disabled provider persists with `default_provider` instead.
 - Binance behavior remains compatible after moving to shared logical symbols and backfilled provider data.
 - The shared domain contains no `10m` interval; both Binance and CMC use the same remaining supported interval set.
 - CMC requests always contain provider-specific chain/address configuration; no attempt is made to guess a DEX address from a ticker.
