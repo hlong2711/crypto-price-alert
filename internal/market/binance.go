@@ -157,8 +157,11 @@ func (p *BinanceProvider) request(ctx context.Context, url, symbol string, start
 	if err != nil {
 		return domain.Candle{}, false, err
 	}
-
 	candle.Symbol = symbol
+
+	if err := candle.Validate(); err != nil {
+		return domain.Candle{}, false, err
+	}
 	return candle, retry, err
 }
 
@@ -212,9 +215,6 @@ func (p *BinanceProvider) parseToCandle(values []string) (domain.Candle, bool, e
 		CloseTime: time.UnixMilli(closeTimeMS),
 	}
 
-	if err := candle.Validate(); err != nil {
-		return domain.Candle{}, false, err
-	}
 	// if candle.OpenTime.Before(start) || candle.OpenTime.After(end) {
 	// 	return domain.Candle{}, false, fmt.Errorf("kline is outside requested period")
 	// }

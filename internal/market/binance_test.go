@@ -38,6 +38,7 @@ func TestBinanceProviderGetKline(t *testing.T) {
 	start := time.UnixMilli(1756681200000)
 	candle, err := provider.GetKline(context.Background(), "BTCUSDT", domain.Interval1H, start, start.Add(time.Hour))
 	if err != nil {
+		println("error found:", err.Error())
 		t.Fatal(err)
 	}
 	if candle.Symbol != "BTCUSDT" || candle.Open != 100 || candle.Close != 105 || candle.Volume != 1234.5 {
