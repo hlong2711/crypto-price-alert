@@ -31,7 +31,10 @@ func NewProviderRegistry(marketConfig config.MarketConfig, client *http.Client, 
 		if !providerConfig.Enabled {
 			continue
 		}
-		capabilities := providerCapabilities{symbols: make(map[string]struct{}), intervals: make(map[domain.Interval]struct{})}
+		capabilities := providerCapabilities{
+			symbols:   make(map[string]struct{}),
+			intervals: make(map[domain.Interval]struct{}),
+		}
 		for symbol := range providerConfig.Symbols {
 			capabilities.symbols[symbol] = struct{}{}
 		}

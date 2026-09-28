@@ -1,11 +1,11 @@
 package market
 
 import (
-	"maps"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"strconv"
 	"time"
@@ -152,6 +152,20 @@ func (p *BinanceProvider) request(ctx context.Context, url, symbol string, start
 			values[i] = string(rawValue)
 		}
 	}
+
+	candle, retry, err := p.parseToCandle(values)
+	if err != nil {
+		return domain.Candle{}, false, err
+	}
+
+	candle.Symbol = symbol
+	return candle, retry, err
+}
+
+// parse raw data of array to candle form
+//
+// return the candle data (without the symbol)
+func (p *BinanceProvider) parseToCandle(values []string) (domain.Candle, bool, error) {
 	openTimeMS, err := strconv.ParseInt(values[0], 10, 64)
 	if err != nil {
 		return domain.Candle{}, false, fmt.Errorf("parse kline open time: %w", err)
@@ -188,7 +202,7 @@ func (p *BinanceProvider) request(ctx context.Context, url, symbol string, start
 		return domain.Candle{}, false, err
 	}
 	candle := domain.Candle{
-		Symbol:    symbol,
+		// Symbol:    symbol,
 		Open:      open,
 		High:      high,
 		Low:       low,
@@ -201,8 +215,8 @@ func (p *BinanceProvider) request(ctx context.Context, url, symbol string, start
 	if err := candle.Validate(); err != nil {
 		return domain.Candle{}, false, err
 	}
-	if candle.OpenTime.Before(start) || candle.OpenTime.After(end) {
-		return domain.Candle{}, false, fmt.Errorf("kline is outside requested period")
-	}
+	// if candle.OpenTime.Before(start) || candle.OpenTime.After(end) {
+	// 	return domain.Candle{}, false, fmt.Errorf("kline is outside requested period")
+	// }
 	return candle, false, nil
 }
