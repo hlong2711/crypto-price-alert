@@ -66,13 +66,14 @@ func toAlertTargetDomain(target database.AlertTarget) domain.AlertTarget {
 
 func toAlertConfigDomain(config database.AlertConfig, symbols []database.AlertConfigSymbol, intervals []database.AlertConfigInterval) domain.AlertConfig {
 	result := domain.AlertConfig{
-		TargetID:  config.TargetID.String(),
-		Enabled:   config.Enabled,
-		Version:   config.Version,
-		UpdatedBy: config.UpdatedBy,
-		UpdatedAt: config.UpdatedAt,
-		Symbols:   make([]string, 0, len(symbols)),
-		Intervals: make([]domain.Interval, 0, len(intervals)),
+		TargetID:       config.TargetID.String(),
+		MarketProvider: config.MarketProvider,
+		Enabled:        config.Enabled,
+		Version:        config.Version,
+		UpdatedBy:      config.UpdatedBy,
+		UpdatedAt:      config.UpdatedAt,
+		Symbols:        make([]string, 0, len(symbols)),
+		Intervals:      make([]domain.Interval, 0, len(intervals)),
 	}
 	for _, symbol := range symbols {
 		result.Symbols = append(result.Symbols, symbol.Symbol)

@@ -22,7 +22,7 @@ func TestAlertTargetValidation(t *testing.T) {
 
 func TestAlertConfigValidation(t *testing.T) {
 	config := AlertConfig{
-		TargetID: "target-1", Symbols: []string{"BTCUSDT"},
+		TargetID: "target-1", MarketProvider: MarketProviderBinance, Symbols: []string{"BTCUSDT"},
 		Intervals: []Interval{Interval1H}, UpdatedBy: "user-1",
 	}
 	if err := config.Validate(); err != nil {

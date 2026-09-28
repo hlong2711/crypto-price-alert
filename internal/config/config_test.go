@@ -5,13 +5,21 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"crypto-price-alert/internal/domain"
 )
 
 func validConfig() Config {
 	return Config{
-		App:           AppConfig{Timezone: "Asia/Ho_Chi_Minh", HTTP: HTTPConfig{Address: ":8080"}},
-		Database:      DatabaseConfig{URL: "postgres://localhost/crypto_alert"},
-		Market:        MarketConfig{Provider: "binance", Symbols: []string{"BTCUSDT"}, Intervals: []string{"1h", "4h"}},
+		App:      AppConfig{Timezone: "Asia/Ho_Chi_Minh", HTTP: HTTPConfig{Address: ":8080"}},
+		Database: DatabaseConfig{URL: "postgres://localhost/crypto_alert"},
+		Market: MarketConfig{
+			DefaultProvider: domain.MarketProviderBinance,
+			Symbols:         []string{"BTC"}, Intervals: []string{"1h", "4h"},
+			Providers: map[domain.MarketProvider]ProviderConfig{
+				domain.MarketProviderBinance: {Enabled: true, Symbols: map[string]ProviderSymbolConfig{"BTC": {Symbol: "BTCUSDT"}}},
+			},
+		},
 		Schedule:      ScheduleConfig{ActiveFrom: "06:00", ActiveUntil: "23:00"},
 		Notifications: NotificationsConfig{Telegram: TelegramConfig{Enabled: true, BotToken: "token", ChatID: "chat"}},
 		Retry:         RetryConfig{MaxAttempts: 3, InitialBackoff: 500 * time.Millisecond},
@@ -103,9 +111,14 @@ database:
   url: "${TEST_DATABASE_URL}"
   notification_jobs_retention: 720h
 market:
-  provider: binance
-  symbols: [BTCUSDT]
+  default_provider: binance
+  symbols: [BTC]
   intervals: [1h]
+  providers:
+    binance:
+      enabled: true
+      symbols:
+        BTC: {symbol: BTCUSDT}
 schedule:
   active_from: "06:00"
   active_until: "23:00"

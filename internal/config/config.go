@@ -39,9 +39,24 @@ type DatabaseConfig struct {
 }
 
 type MarketConfig struct {
-	Provider  string   `yaml:"provider"`
-	Symbols   []string `yaml:"symbols"`
-	Intervals []string `yaml:"intervals"`
+	DefaultProvider domain.MarketProvider                    `yaml:"default_provider"`
+	Symbols         []string                                 `yaml:"symbols"`
+	Intervals       []string                                 `yaml:"intervals"`
+	Providers       map[domain.MarketProvider]ProviderConfig `yaml:"providers"`
+}
+
+type ProviderConfig struct {
+	Enabled bool                            `yaml:"enabled"`
+	BaseURL string                          `yaml:"base_url"`
+	APIKey  string                          `yaml:"api_key"`
+	Unit    string                          `yaml:"unit"`
+	Symbols map[string]ProviderSymbolConfig `yaml:"symbols"`
+}
+
+type ProviderSymbolConfig struct {
+	Symbol   string `yaml:"symbol"`
+	Platform string `yaml:"platform"`
+	Address  string `yaml:"address"`
 }
 
 type ScheduleConfig struct {
@@ -136,22 +151,77 @@ func (c Config) Validate() error {
 	if c.Database.NotificationJobsRetention < 0 {
 		return errors.New("database.notification_jobs_retention must not be negative")
 	}
-	if c.Market.Provider != "binance" {
-		return fmt.Errorf("market.provider %q is unsupported", c.Market.Provider)
-	}
 	if len(c.Market.Symbols) == 0 {
 		return errors.New("market.symbols must not be empty")
 	}
 	if len(c.Market.Intervals) == 0 {
 		return errors.New("market.intervals must not be empty")
 	}
-	for _, interval := range c.Market.Intervals {
+	seenSymbols := make(map[string]struct{}, len(c.Market.Symbols))
+	for _, symbol := range c.Market.Symbols {
+		symbol = strings.ToUpper(strings.TrimSpace(symbol))
+		if symbol == "" {
+			return errors.New("market.symbols contains an empty symbol")
+		}
+		if _, ok := seenSymbols[symbol]; ok {
+			return fmt.Errorf("market.symbols contains duplicate %q", symbol)
+		}
+		seenSymbols[symbol] = struct{}{}
+	}
+	seenIntervals := make(map[domain.Interval]struct{}, len(c.Market.Intervals))
+	for _, rawInterval := range c.Market.Intervals {
+		interval := domain.Interval(strings.ToLower(strings.TrimSpace(rawInterval)))
 		if err := domain.Interval(interval).Validate(); err != nil {
 			return fmt.Errorf("market.intervals: %w", err)
 		}
+		if _, ok := seenIntervals[interval]; ok {
+			return fmt.Errorf("market.intervals contains duplicate %q", interval)
+		}
+		seenIntervals[interval] = struct{}{}
+	}
+	if len(c.Market.Providers) == 0 {
+		return errors.New("market.providers must not be empty")
+	}
+	defaultProvider := domain.MarketProvider(strings.ToLower(strings.TrimSpace(string(c.Market.DefaultProvider))))
+	if err := defaultProvider.Validate(); err != nil {
+		return fmt.Errorf("market.default_provider: %w", err)
+	}
+	defaultConfig, ok := c.Market.Providers[defaultProvider]
+	if !ok || !defaultConfig.Enabled {
+		return fmt.Errorf("market.default_provider %q must name an enabled provider", defaultProvider)
+	}
+	for provider, providerConfig := range c.Market.Providers {
+		if err := provider.Validate(); err != nil {
+			return err
+		}
+		if !providerConfig.Enabled {
+			continue
+		}
+		if providerConfig.Unit == "" && provider == domain.MarketProviderCoinMarketCap {
+			providerConfig.Unit = "usd"
+		}
+		if provider == domain.MarketProviderCoinMarketCap && strings.ToLower(providerConfig.Unit) != "usd" {
+			return fmt.Errorf("market.providers.%s.unit %q is unsupported", provider, providerConfig.Unit)
+		}
+		for rawSymbol, mapping := range providerConfig.Symbols {
+			symbol := strings.ToUpper(strings.TrimSpace(rawSymbol))
+			if _, ok := seenSymbols[symbol]; !ok {
+				return fmt.Errorf("market.providers.%s.symbols.%s is not in market.symbols", provider, rawSymbol)
+			}
+			switch provider {
+			case domain.MarketProviderBinance:
+				if strings.TrimSpace(mapping.Symbol) == "" {
+					return fmt.Errorf("market.providers.%s.symbols.%s.symbol is required", provider, rawSymbol)
+				}
+			case domain.MarketProviderCoinMarketCap:
+				if strings.TrimSpace(mapping.Platform) == "" || strings.TrimSpace(mapping.Address) == "" {
+					return fmt.Errorf("market.providers.%s.symbols.%s requires platform and address", provider, rawSymbol)
+				}
+			}
+		}
 	}
 	if c.Schedule.TickInterval != "" {
-		if err := domain.Interval(c.Schedule.TickInterval).Validate(); err != nil {
+		if err := domain.Interval(strings.ToLower(strings.TrimSpace(c.Schedule.TickInterval))).Validate(); err != nil {
 			return fmt.Errorf("schedule.tick_interval: %w", err)
 		}
 	}
