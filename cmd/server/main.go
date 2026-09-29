@@ -67,15 +67,20 @@ func main() {
 	}
 	defer stopNotificationJobCleanup()
 
-	provider, err := market.NewBinanceProvider(
-		"",
+	registry, err := market.NewProviderRegistry(
+		cfg.Market,
 		&http.Client{Timeout: 10 * time.Second},
 		cfg.Retry.MaxAttempts,
 		cfg.Retry.InitialBackoff,
 		cfg.Concurrency.MarketRequests,
 	)
 	if err != nil {
-		logger.Error("failed to initialize market provider", "error", err)
+		logger.Error("failed to initialize market provider registry", "error", err)
+		os.Exit(1)
+	}
+	_, provider, err := registry.Default()
+	if err != nil {
+		logger.Error("failed to resolve default market provider", "error", err)
 		os.Exit(1)
 	}
 
@@ -100,7 +105,7 @@ func main() {
 		logger.Error("failed to initialize scheduler executor", "error", err)
 		os.Exit(1)
 	}
-	targetExecutor, err := scheduler.NewTargetExecutor(periods, provider, jobRepo, jobRepo, jobRepo, targetNotifiers, executor, location)
+	targetExecutor, err := scheduler.NewTargetExecutorWithResolver(periods, registry, jobRepo, jobRepo, jobRepo, targetNotifiers, executor, location)
 	if err != nil {
 		logger.Error("failed to initialize target scheduler executor", "error", err)
 		os.Exit(1)
@@ -127,13 +132,13 @@ func main() {
 	}()
 	logger.Info("scheduler started", "timezone", cfg.App.Timezone)
 
-	alertService, err := service.NewAlertService(provider, notifiers, notifierNames(cfg), cfg.Market.Symbols, location)
+	alertService, err := service.NewAlertServiceWithRegistry(registry, notifiers, notifierNames(cfg), cfg.Market.Symbols, cfg.Market.DefaultProvider, location)
 	if err != nil {
 		logger.Error("failed to initialize alert service", "error", err)
 		os.Exit(1)
 	}
 
-	initServer(logger, cfg, cfg.App.HTTP.Address, alertService, periods, jobRepo)
+	initServer(logger, cfg, cfg.App.HTTP.Address, alertService, periods, jobRepo, registry)
 }
 
 func startNotificationJobCleanup(
@@ -255,11 +260,11 @@ func notifierNames(cfg config.Config) []string {
 	return names
 }
 
-func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine, repo *repository.PostgresRepository) {
+func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine, repo *repository.PostgresRepository, providers *market.ProviderRegistry) {
 	e := api.NewServer(alerts, periods)
 
 	if cfg.Chat.Enabled && cfg.Chat.Telegram.Enabled {
-		chatHandler, err := newTelegramChatHandler(cfg, repo)
+		chatHandler, err := newTelegramChatHandler(cfg, repo, providers)
 		if err != nil {
 			logger.Error("failed to initialize Telegram chat handler", "error", err)
 			os.Exit(1)
@@ -289,7 +294,7 @@ func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *
 		}
 	}
 	if cfg.Chat.Enabled && cfg.Chat.Slack.Enabled {
-		chatHandler, err := newSlackChatHandler(cfg, repo)
+		chatHandler, err := newSlackChatHandler(cfg, repo, providers)
 		if err != nil {
 			logger.Error("failed to initialize Slack chat handler", "error", err)
 			os.Exit(1)
@@ -325,12 +330,12 @@ func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *
 	}
 }
 
-func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresRepository) (*telegram.Adapter, error) {
+func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresRepository, providers *market.ProviderRegistry) (*telegram.Adapter, error) {
 	allowedIntervals := make([]domain.Interval, 0, len(cfg.Market.Intervals))
 	for _, value := range cfg.Market.Intervals {
 		allowedIntervals = append(allowedIntervals, domain.Interval(value))
 	}
-	configurationService, err := configuration.NewService(repo, repo, cfg.Market.Symbols, allowedIntervals, cfg.Chat.MaxSymbolsPerTarget, cfg.Chat.MaxTargets)
+	configurationService, err := configuration.NewService(repo, repo, cfg.Market.Symbols, allowedIntervals, cfg.Chat.MaxSymbolsPerTarget, cfg.Chat.MaxTargets, providers, cfg.Market.DefaultProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -343,15 +348,15 @@ func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresReposito
 	if err != nil {
 		return nil, err
 	}
-	return telegram.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Telegram.WebhookSecret, "default", cfg.Market.Symbols, allowedIntervals)
+	return telegram.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Telegram.WebhookSecret, "default", cfg.Market.Symbols, allowedIntervals, providers)
 }
 
-func newSlackChatHandler(cfg config.Config, repo *repository.PostgresRepository) (*slack.Adapter, error) {
+func newSlackChatHandler(cfg config.Config, repo *repository.PostgresRepository, providers *market.ProviderRegistry) (*slack.Adapter, error) {
 	allowedIntervals := make([]domain.Interval, 0, len(cfg.Market.Intervals))
 	for _, value := range cfg.Market.Intervals {
 		allowedIntervals = append(allowedIntervals, domain.Interval(value))
 	}
-	configurationService, err := configuration.NewService(repo, repo, cfg.Market.Symbols, allowedIntervals, cfg.Chat.MaxSymbolsPerTarget, cfg.Chat.MaxTargets)
+	configurationService, err := configuration.NewService(repo, repo, cfg.Market.Symbols, allowedIntervals, cfg.Chat.MaxSymbolsPerTarget, cfg.Chat.MaxTargets, providers, cfg.Market.DefaultProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -364,5 +369,5 @@ func newSlackChatHandler(cfg config.Config, repo *repository.PostgresRepository)
 	if err != nil {
 		return nil, err
 	}
-	return slack.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Slack.SigningSecret, "default", cfg.Chat.Slack.AppID, cfg.Chat.Slack.TeamID, cfg.Market.Symbols, allowedIntervals)
+	return slack.NewAdapter(client, repo, repo, chatService, sessions, cfg.Chat.Slack.SigningSecret, "default", cfg.Chat.Slack.AppID, cfg.Chat.Slack.TeamID, cfg.Market.Symbols, allowedIntervals, providers)
 }

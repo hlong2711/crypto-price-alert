@@ -33,8 +33,6 @@ func (i Interval) Duration() (time.Duration, error) {
 		return 3 * time.Minute, nil
 	case Interval5M:
 		return 5 * time.Minute, nil
-	case Interval10M:
-		return 10 * time.Minute, nil
 	case Interval15M:
 		return 15 * time.Minute, nil
 	case Interval30M:
@@ -120,6 +118,7 @@ const (
 
 type Job struct {
 	ID, TargetID, Symbol   string
+	MarketProvider         MarketProvider
 	Interval               Interval
 	PeriodStart, PeriodEnd time.Time
 	Status                 JobStatus
@@ -129,14 +128,31 @@ type Job struct {
 }
 
 func (j Job) Validate() error {
-	if j.ID == "" || j.Symbol == "" || j.PeriodStart.IsZero() || j.PeriodEnd.IsZero() || !j.PeriodEnd.After(j.PeriodStart) {
+	if j.ID == "" || j.Symbol == "" || j.MarketProvider == "" || j.PeriodStart.IsZero() || j.PeriodEnd.IsZero() || !j.PeriodEnd.After(j.PeriodStart) {
 		return fmt.Errorf("invalid job")
 	}
 	if err := j.Interval.Validate(); err != nil {
 		return err
 	}
+	if err := j.MarketProvider.Validate(); err != nil {
+		return err
+	}
 	if j.Status != JobPending && j.Status != JobSent && j.Status != JobFailed {
 		return fmt.Errorf("unsupported job status %q", j.Status)
+	}
+	return nil
+}
+
+type MarketProvider string
+
+const (
+	MarketProviderBinance       MarketProvider = "binance"
+	MarketProviderCoinMarketCap MarketProvider = "coinmarketcap"
+)
+
+func (p MarketProvider) Validate() error {
+	if p != MarketProviderBinance && p != MarketProviderCoinMarketCap {
+		return fmt.Errorf("unsupported market provider %q", p)
 	}
 	return nil
 }
@@ -182,18 +198,22 @@ func (t AlertTarget) Validate() error {
 }
 
 type AlertConfig struct {
-	TargetID  string
-	Enabled   bool
-	Symbols   []string
-	Intervals []Interval
-	Version   int64
-	UpdatedBy string
-	UpdatedAt time.Time
+	TargetID       string
+	MarketProvider MarketProvider
+	Enabled        bool
+	Symbols        []string
+	Intervals      []Interval
+	Version        int64
+	UpdatedBy      string
+	UpdatedAt      time.Time
 }
 
 func (c AlertConfig) Validate() error {
-	if c.TargetID == "" || c.Version < 0 || c.UpdatedBy == "" {
+	if c.TargetID == "" || c.MarketProvider == "" || c.Version < 0 || c.UpdatedBy == "" {
 		return fmt.Errorf("invalid alert config")
+	}
+	if err := c.MarketProvider.Validate(); err != nil {
+		return err
 	}
 	if len(c.Symbols) == 0 || len(c.Intervals) == 0 {
 		return fmt.Errorf("alert config requires symbols and intervals")

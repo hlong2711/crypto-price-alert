@@ -9,14 +9,27 @@ database:
   notification_jobs_retention: 720h
 
 market:
-  provider: binance
+  default_provider: binance
   symbols:
-    - BTCUSDT
-    - ETHUSDT
-    - SOLUSDT
+    - BTC
+    - ETH
+    - SOL
   intervals:
     - 1h
     - 4h
+  providers:
+    binance:
+      enabled: true
+      base_url: https://api.binance.com
+      symbols:
+        BTC: { symbol: BTCUSDT }
+        ETH: { symbol: ETHUSDT }
+        SOL: { symbol: SOLUSDT }
+    coinmarketcap:
+      enabled: false
+      base_url: https://pro-api.coinmarketcap.com
+      unit: usd
+      symbols: {}
 
 schedule:
   active_from: "06:00"

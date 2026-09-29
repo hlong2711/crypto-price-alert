@@ -19,13 +19,16 @@ func (f *fakeConfigurationService) GetConfig(context.Context, string) (domain.Al
 func (f *fakeConfigurationService) GetOrCreateConfig(context.Context, string, string) (domain.AlertConfig, error) {
 	return f.config, nil
 }
-func (f *fakeConfigurationService) ReplaceConfig(_ context.Context, targetID string, symbols []string, intervals []domain.Interval, enabled bool, updatedBy string, expectedVersion int64) (domain.AlertConfig, error) {
+func (f *fakeConfigurationService) ReplaceConfig(_ context.Context, targetID string, provider domain.MarketProvider, symbols []string, intervals []domain.Interval, enabled bool, updatedBy string, expectedVersion int64) (domain.AlertConfig, error) {
 	if f.config.Version != expectedVersion {
 		return domain.AlertConfig{}, context.DeadlineExceeded
 	}
 	f.replaceCalls++
-	f.config = domain.AlertConfig{TargetID: targetID, Enabled: enabled, Symbols: symbols, Intervals: intervals, Version: expectedVersion + 1, UpdatedBy: updatedBy}
+	f.config = domain.AlertConfig{TargetID: targetID, MarketProvider: provider, Enabled: enabled, Symbols: symbols, Intervals: intervals, Version: expectedVersion + 1, UpdatedBy: updatedBy}
 	return f.config, nil
+}
+func (f *fakeConfigurationService) EnabledMarketProviders() []domain.MarketProvider {
+	return []domain.MarketProvider{domain.MarketProviderBinance}
 }
 func (f *fakeConfigurationService) Enable(context.Context, string, string, int64) (domain.AlertConfig, error) {
 	return f.config, nil
@@ -59,7 +62,7 @@ func TestServiceSessionOwnershipAndStaleVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.UpdateSession(context.Background(), Command{Target: target, ActorUserID: "member", Action: ActionSave, Arguments: []string{response}}, []string{"ETHUSDT"}, []domain.Interval{domain.Interval4H}); err == nil {
+	if err := service.UpdateSession(context.Background(), Command{Target: target, ActorUserID: "member", Action: ActionSave, Arguments: []string{response}}, domain.MarketProviderBinance, []string{"ETHUSDT"}, []domain.Interval{domain.Interval4H}); err == nil {
 		t.Fatal("expected wrong actor to be rejected")
 	}
 	configuration.config.Version++
@@ -78,7 +81,7 @@ func TestServiceSaveConsumesSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.UpdateSession(context.Background(), Command{Target: target, ActorUserID: "creator", Action: ActionSave, Arguments: []string{response}}, []string{"ETHUSDT"}, []domain.Interval{domain.Interval4H}); err != nil {
+	if err := service.UpdateSession(context.Background(), Command{Target: target, ActorUserID: "creator", Action: ActionSave, Arguments: []string{response}}, domain.MarketProviderBinance, []string{"ETHUSDT"}, []domain.Interval{domain.Interval4H}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Handle(context.Background(), Command{Target: target, ActorUserID: "creator", Action: ActionSave, Arguments: []string{response}}); err != nil {
@@ -92,5 +95,22 @@ func TestServiceSaveConsumesSession(t *testing.T) {
 	}
 	if _, err := sessions.Get(context.Background(), response); err == nil {
 		t.Fatal("expected saved session to be deleted")
+	}
+}
+
+func TestServiceSavePersistsSessionProvider(t *testing.T) {
+	service, configuration, _, target := newChatService(t)
+	response, err := service.Handle(context.Background(), Command{Target: target, ActorUserID: "creator", Action: ActionConfigure})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := service.UpdateSession(context.Background(), Command{Target: target, ActorUserID: "creator", Action: ActionSave, Arguments: []string{response}}, domain.MarketProviderBinance, []string{"BTCUSDT"}, []domain.Interval{domain.Interval1H}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Handle(context.Background(), Command{Target: target, ActorUserID: "creator", Action: ActionSave, Arguments: []string{response}}); err != nil {
+		t.Fatal(err)
+	}
+	if configuration.config.MarketProvider != domain.MarketProviderBinance {
+		t.Fatalf("unexpected provider %q", configuration.config.MarketProvider)
 	}
 }
