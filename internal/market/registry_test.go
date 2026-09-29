@@ -27,6 +27,9 @@ func TestProviderRegistryBuildsEnabledProvidersAndCapabilities(t *testing.T) {
 	if _, _, err := registry.Default(); err != nil {
 		t.Fatal(err)
 	}
+	if got, ok := registry.CanonicalSymbol(domain.MarketProviderBinance, "btcusdt"); !ok || got != "BTC" {
+		t.Fatalf("legacy Binance symbol resolved to %q, %t; want BTC, true", got, ok)
+	}
 }
 
 func TestProviderRegistryRejectsMissingDefault(t *testing.T) {

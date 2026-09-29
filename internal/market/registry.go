@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"crypto-price-alert/internal/config"
@@ -16,16 +17,18 @@ type providerCapabilities struct {
 }
 
 type ProviderRegistry struct {
-	providers       map[domain.MarketProvider]MarketDataProvider
-	capabilities    map[domain.MarketProvider]providerCapabilities
-	defaultProvider domain.MarketProvider
+	providers        map[domain.MarketProvider]MarketDataProvider
+	capabilities     map[domain.MarketProvider]providerCapabilities
+	canonicalSymbols map[domain.MarketProvider]map[string]string
+	defaultProvider  domain.MarketProvider
 }
 
 func NewProviderRegistry(marketConfig config.MarketConfig, client *http.Client, maxAttempts int, backoff time.Duration, concurrency int) (*ProviderRegistry, error) {
 	registry := &ProviderRegistry{
-		providers:       make(map[domain.MarketProvider]MarketDataProvider),
-		capabilities:    make(map[domain.MarketProvider]providerCapabilities),
-		defaultProvider: marketConfig.DefaultProvider,
+		providers:        make(map[domain.MarketProvider]MarketDataProvider),
+		capabilities:     make(map[domain.MarketProvider]providerCapabilities),
+		canonicalSymbols: make(map[domain.MarketProvider]map[string]string),
+		defaultProvider:  marketConfig.DefaultProvider,
 	}
 	for providerName, providerConfig := range marketConfig.Providers {
 		if !providerConfig.Enabled {
@@ -35,8 +38,10 @@ func NewProviderRegistry(marketConfig config.MarketConfig, client *http.Client, 
 			symbols:   make(map[string]struct{}),
 			intervals: make(map[domain.Interval]struct{}),
 		}
+		canonicalSymbols := make(map[string]string, len(providerConfig.Symbols)*2)
 		for symbol := range providerConfig.Symbols {
 			capabilities.symbols[symbol] = struct{}{}
+			canonicalSymbols[normalizeSymbol(symbol)] = symbol
 		}
 		for _, rawInterval := range marketConfig.Intervals {
 			capabilities.intervals[domain.Interval(rawInterval)] = struct{}{}
@@ -49,6 +54,7 @@ func NewProviderRegistry(marketConfig config.MarketConfig, client *http.Client, 
 			mappings := make(map[string]string, len(providerConfig.Symbols))
 			for symbol, mapping := range providerConfig.Symbols {
 				mappings[symbol] = mapping.Symbol
+				canonicalSymbols[normalizeSymbol(mapping.Symbol)] = symbol
 			}
 			provider, err = NewBinanceProvider(providerConfig.BaseURL, client, maxAttempts, backoff, concurrency, mappings)
 
@@ -68,11 +74,30 @@ func NewProviderRegistry(marketConfig config.MarketConfig, client *http.Client, 
 		}
 		registry.providers[providerName] = provider
 		registry.capabilities[providerName] = capabilities
+		registry.canonicalSymbols[providerName] = canonicalSymbols
 	}
 	if _, ok := registry.providers[registry.defaultProvider]; !ok {
 		return nil, fmt.Errorf("default market provider %q is not enabled", registry.defaultProvider)
 	}
 	return registry, nil
+}
+
+// CanonicalSymbol returns the configured alert symbol for a canonical symbol
+// or a provider-specific mapping (for example, BTCUSDT becomes BTC).
+func (r *ProviderRegistry) CanonicalSymbol(provider domain.MarketProvider, symbol string) (string, bool) {
+	if r == nil {
+		return "", false
+	}
+	canonicalSymbols, ok := r.canonicalSymbols[provider]
+	if !ok {
+		return "", false
+	}
+	canonical, ok := canonicalSymbols[normalizeSymbol(symbol)]
+	return canonical, ok
+}
+
+func normalizeSymbol(symbol string) string {
+	return strings.ToUpper(strings.TrimSpace(symbol))
 }
 
 func (r *ProviderRegistry) Get(provider domain.MarketProvider) (MarketDataProvider, error) {

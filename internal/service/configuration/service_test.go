@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"crypto-price-alert/internal/config"
 	"crypto-price-alert/internal/domain"
 	"crypto-price-alert/internal/market"
 	"crypto-price-alert/internal/repository"
@@ -107,6 +108,36 @@ func TestGetOrCreateConfigCreatesDisabledDefault(t *testing.T) {
 	}
 	if config.Enabled || config.TargetID != "target" || len(config.Symbols) != 1 || config.Symbols[0] != "BTCUSDT" || len(config.Intervals) != 1 || config.Intervals[0] != domain.Interval1H {
 		t.Fatalf("unexpected created config: %+v", config)
+	}
+}
+
+func TestGetOrCreateConfigCanonicalizesLegacyProviderSymbols(t *testing.T) {
+	configs := &fakeConfigRepository{created: domain.AlertConfig{
+		TargetID:       "target",
+		MarketProvider: domain.MarketProviderBinance,
+		Symbols:        []string{"BTCUSDT"},
+		Intervals:      []domain.Interval{domain.Interval1H},
+	}}
+	registry, err := market.NewProviderRegistry(config.MarketConfig{
+		DefaultProvider: domain.MarketProviderBinance,
+		Intervals:       []string{"1h"},
+		Providers: map[domain.MarketProvider]config.ProviderConfig{
+			domain.MarketProviderBinance: {Enabled: true, Symbols: map[string]config.ProviderSymbolConfig{"BTC": {Symbol: "BTCUSDT"}}},
+		},
+	}, nil, 1, time.Millisecond, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewService(fakeTargetRepository{}, configs, []string{"BTC"}, []domain.Interval{domain.Interval1H}, 2, 10, registry, domain.MarketProviderBinance)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.GetOrCreateConfig(context.Background(), "target", "creator")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Symbols) != 1 || got.Symbols[0] != "BTC" {
+		t.Fatalf("legacy symbol was not canonicalized: %+v", got.Symbols)
 	}
 }
 

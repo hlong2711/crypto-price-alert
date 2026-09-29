@@ -99,6 +99,7 @@ func (s *Service) GetOrCreateConfig(ctx context.Context, targetID, updatedBy str
 	config, err := s.GetConfig(ctx, targetID)
 	if err == nil {
 		config.MarketProvider = s.effectiveProvider(config.MarketProvider)
+		config.Symbols = s.canonicalSymbols(config.MarketProvider, config.Symbols)
 		return config, nil
 	}
 	if !errors.Is(err, repository.ErrAlertConfigNotFound) {
@@ -108,11 +109,32 @@ func (s *Service) GetOrCreateConfig(ctx context.Context, targetID, updatedBy str
 		// Another concurrent configure request may have created it first.
 		if existing, getErr := s.GetConfig(ctx, targetID); getErr == nil {
 			existing.MarketProvider = s.effectiveProvider(existing.MarketProvider)
+			existing.Symbols = s.canonicalSymbols(existing.MarketProvider, existing.Symbols)
 			return existing, nil
 		}
 		return domain.AlertConfig{}, err
 	}
 	return s.GetConfig(ctx, targetID)
+}
+
+// canonicalSymbols keeps existing alert configurations usable after a market
+// configuration changes from provider symbols (such as BTCUSDT) to canonical
+// asset symbols (such as BTC). The converted selections are persisted when the
+// user saves the configure session.
+func (s *Service) canonicalSymbols(provider domain.MarketProvider, symbols []string) []string {
+	canonicalizer, ok := s.providers.(market.SymbolCanonicalizer)
+	if !ok {
+		return append([]string(nil), symbols...)
+	}
+	result := make([]string, 0, len(symbols))
+	for _, symbol := range symbols {
+		if canonical, found := canonicalizer.CanonicalSymbol(provider, symbol); found {
+			result = append(result, canonical)
+			continue
+		}
+		result = append(result, symbol)
+	}
+	return result
 }
 
 func (s *Service) ReplaceConfig(

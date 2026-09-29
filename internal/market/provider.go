@@ -17,6 +17,13 @@ type ProviderResolver interface {
 	Enabled() []domain.MarketProvider
 }
 
+// SymbolCanonicalizer translates a provider-specific symbol into the symbol
+// used by alert configuration. It is intentionally separate from
+// ProviderResolver so simple/static resolvers do not need to supply mappings.
+type SymbolCanonicalizer interface {
+	CanonicalSymbol(domain.MarketProvider, string) (string, bool)
+}
+
 type StaticProviderResolver struct {
 	provider MarketDataProvider
 }
