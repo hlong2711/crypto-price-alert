@@ -23,7 +23,7 @@ func botCommands() []BotCommand {
 
 type CommandService interface {
 	Handle(context.Context, chat.Command) (string, error)
-	UpdateSession(context.Context, chat.Command, []string, []domain.Interval) error
+	UpdateSession(context.Context, chat.Command, domain.MarketProvider, []string, []domain.Interval) error
 }
 
 type EventRepository interface {
@@ -46,8 +46,9 @@ func parseCallback(data string) (string, string, error) {
 }
 
 // sample:
-//  crypto-alert:uuid:symbol:BTCUSDT
-//  crypto-alert:uuid:save
+//
+//	crypto-alert:uuid:symbol:BTCUSDT
+//	crypto-alert:uuid:save
 func callbackData(sessionID, action string) string {
 	return "crypto-alert:" + sessionID + ":" + action
 }

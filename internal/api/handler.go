@@ -25,6 +25,7 @@ func (h *Handler) Health(c echo.Context) error {
 }
 
 type runAlertRequest struct {
+	Provider    string   `json:"provider"`
 	Interval    string   `json:"interval"`
 	Symbols     []string `json:"symbols"`
 	At          string   `json:"at"`
@@ -47,6 +48,9 @@ func (h *Handler) RunAlert(c echo.Context) error {
 	// Allow query params as an alternative for quick curl testing.
 	if req.Interval == "" {
 		req.Interval = c.QueryParam("interval")
+	}
+	if req.Provider == "" {
+		req.Provider = c.QueryParam("provider")
 	}
 	if req.At == "" {
 		req.At = c.QueryParam("at")
@@ -86,9 +90,17 @@ func (h *Handler) RunAlert(c echo.Context) error {
 	}
 
 	ctx := c.Request().Context()
-	result, err := h.alerts.Run(ctx, interval, period, symbols, dryRun)
+	provider := domain.MarketProvider(req.Provider)
+	if provider == "" {
+		result, err := h.alerts.Run(ctx, interval, period, symbols, dryRun)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
+		return c.JSON(http.StatusOK, result)
+	}
+	result, err := h.alerts.RunWithProvider(ctx, provider, interval, period, symbols, dryRun)
 	if err != nil {
-		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 	}
 	return c.JSON(http.StatusOK, result)
 }

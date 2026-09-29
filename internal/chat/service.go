@@ -16,7 +16,8 @@ import (
 type ConfigurationService interface {
 	GetConfig(context.Context, string) (domain.AlertConfig, error)
 	GetOrCreateConfig(context.Context, string, string) (domain.AlertConfig, error)
-	ReplaceConfig(context.Context, string, []string, []domain.Interval, bool, string, int64) (domain.AlertConfig, error)
+	ReplaceConfig(context.Context, string, domain.MarketProvider, []string, []domain.Interval, bool, string, int64) (domain.AlertConfig, error)
+	EnabledMarketProviders() []domain.MarketProvider
 	Enable(context.Context, string, string, int64) (domain.AlertConfig, error)
 	Pause(context.Context, string, string, int64) (domain.AlertConfig, error)
 }
@@ -64,7 +65,7 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("enabled=%t symbols=%s intervals=%s version=%d", config.Enabled, strings.Join(config.Symbols, ","), joinIntervals(config.Intervals), config.Version), nil
+		return fmt.Sprintf("enabled=%t provider=%s symbols=%s intervals=%s version=%d", config.Enabled, config.MarketProvider, strings.Join(config.Symbols, ","), joinIntervals(config.Intervals), config.Version), nil
 
 	case ActionConfigure:
 		config, err := s.configuration.GetOrCreateConfig(ctx, command.Target.ID, command.ActorUserID)
@@ -120,7 +121,7 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 }
 
 // UpdateSession replaces the selections in an actor-owned configuration session.
-func (s *Service) UpdateSession(ctx context.Context, command Command, symbols []string, intervals []domain.Interval) error {
+func (s *Service) UpdateSession(ctx context.Context, command Command, provider domain.MarketProvider, symbols []string, intervals []domain.Interval) error {
 	if err := s.authorizer.Authorize(ctx, AuthorizationRequest{
 		Target:      command.Target,
 		ActorUserID: command.ActorUserID,
@@ -138,6 +139,7 @@ func (s *Service) UpdateSession(ctx context.Context, command Command, symbols []
 	if session.TargetID != command.Target.ID || session.ActorUserID != command.ActorUserID {
 		return fmt.Errorf("session does not belong to actor and target")
 	}
+	session.SelectedProvider = provider
 	session.SelectedSymbols = append([]string(nil), symbols...)
 	session.SelectedIntervals = append([]domain.Interval(nil), intervals...)
 	return s.sessions.Update(ctx, session)
@@ -164,6 +166,7 @@ func (s *Service) saveSession(ctx context.Context, command Command) error {
 	if _, err := s.configuration.ReplaceConfig(
 		ctx,
 		session.TargetID,
+		session.SelectedProvider,
 		session.SelectedSymbols,
 		session.SelectedIntervals,
 		config.Enabled,

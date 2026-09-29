@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 // TargetExecutor runs independently configured alert jobs for each enabled target.
 type TargetExecutor struct {
 	periods   *PeriodEngine
-	market    market.MarketDataProvider
+	providers market.ProviderResolver
 	jobs      repository.JobRepository
 	targets   repository.AlertTargetRepository
 	configs   repository.AlertConfigRepository
@@ -43,14 +44,27 @@ func NewTargetExecutor(
 	legacy *Executor,
 	location *time.Location,
 ) (*TargetExecutor, error) {
-	if periods == nil || provider == nil || jobs == nil || targets == nil || configs == nil || len(notifiers) == 0 || location == nil {
+	return NewTargetExecutorWithResolver(periods, market.NewStaticProviderResolver(provider), jobs, targets, configs, notifiers, legacy, location)
+}
+
+func NewTargetExecutorWithResolver(
+	periods *PeriodEngine,
+	providers market.ProviderResolver,
+	jobs repository.JobRepository,
+	targets repository.AlertTargetRepository,
+	configs repository.AlertConfigRepository,
+	notifiers []notification.Notifier,
+	legacy *Executor,
+	location *time.Location,
+) (*TargetExecutor, error) {
+	if periods == nil || providers == nil || jobs == nil || targets == nil || configs == nil || len(notifiers) == 0 || location == nil {
 		return nil, fmt.Errorf("invalid target executor settings")
 	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	return &TargetExecutor{
 		periods:   periods,
-		market:    provider,
+		providers: providers,
 		jobs:      jobs,
 		targets:   targets,
 		configs:   configs,
@@ -97,6 +111,19 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 		if !config.Enabled || !containsInterval(config.Intervals, interval) {
 			continue
 		}
+		if config.MarketProvider == "" {
+			config.MarketProvider = domain.MarketProviderBinance
+		}
+		if !e.providers.Supports(config.MarketProvider, "", interval) {
+			// Static compatibility resolvers cannot inspect symbols; the concrete
+			// registry performs the full symbol/interval check below.
+			if _, err := e.providers.Get(config.MarketProvider); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+		}
 		eligible = append(eligible, eligibleTarget{target: target, config: config})
 	}
 
@@ -104,18 +131,26 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 	// symbols that still need a result this round.
 	pending := make([][]pendingJob, len(eligible))
 	dropped := make([]bool, len(eligible))
-	neededSet := make(map[string]struct{})
+	neededSet := make(map[fetchKey]struct{})
 	for i, et := range eligible {
 		jobsForTarget := make([]pendingJob, 0, len(et.config.Symbols))
 		for _, symbol := range et.config.Symbols {
+			if !e.providers.Supports(et.config.MarketProvider, symbol, interval) {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("market provider %q does not support %s/%s", et.config.MarketProvider, symbol, interval)
+				}
+				dropped[i] = true
+				break
+			}
 			job := domain.Job{
-				ID:          uuid.NewString(),
-				TargetID:    et.target.ID,
-				Symbol:      symbol,
-				Interval:    period.Interval,
-				PeriodStart: period.Start,
-				PeriodEnd:   period.End,
-				Status:      domain.JobPending,
+				ID:             uuid.NewString(),
+				TargetID:       et.target.ID,
+				MarketProvider: et.config.MarketProvider,
+				Symbol:         symbol,
+				Interval:       period.Interval,
+				PeriodStart:    period.Start,
+				PeriodEnd:      period.End,
+				Status:         domain.JobPending,
 			}
 			created, isNew, err := e.jobs.CreateIfNotExists(ctx, job)
 			if err != nil {
@@ -129,7 +164,7 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 				continue
 			}
 			jobsForTarget = append(jobsForTarget, pendingJob{job: created, symbol: symbol})
-			neededSet[symbol] = struct{}{}
+			neededSet[fetchKey{provider: et.config.MarketProvider, symbol: symbol}] = struct{}{}
 		}
 		if !dropped[i] {
 			pending[i] = jobsForTarget
@@ -140,28 +175,41 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 	}
 
 	// Phase 2: fetch each needed symbol ONCE, sequentially in sorted order.
-	symbols := make([]string, 0, len(neededSet))
-	for symbol := range neededSet {
-		symbols = append(symbols, symbol)
+	keys := make([]fetchKey, 0, len(neededSet))
+	for key := range neededSet {
+		keys = append(keys, key)
 	}
-	slices.Sort(symbols)
-	outcomes := make(map[string]fetchOutcome, len(symbols))
-	for _, symbol := range symbols {
-		candle, err := e.market.GetKline(ctx, symbol, period.Interval, period.Start, period.End)
+	slices.SortFunc(keys, func(a, b fetchKey) int {
+		if a.provider != b.provider {
+			if a.provider < b.provider {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.symbol, b.symbol)
+	})
+	outcomes := make(map[fetchKey]fetchOutcome, len(keys))
+	for _, key := range keys {
+		provider, err := e.providers.Get(key.provider)
 		if err != nil {
-			outcomes[symbol] = fetchOutcome{
-				result: notification.PriceResult{Change: domain.PriceChange{Symbol: symbol}, Unavailable: true},
+			outcomes[key] = fetchOutcome{result: notification.PriceResult{Change: domain.PriceChange{Symbol: key.symbol}, Unavailable: true}}
+			continue
+		}
+		candle, err := provider.GetKline(ctx, key.symbol, period.Interval, period.Start, period.End)
+		if err != nil {
+			outcomes[key] = fetchOutcome{
+				result: notification.PriceResult{Change: domain.PriceChange{Symbol: key.symbol}, Unavailable: true},
 			}
 			continue
 		}
 		change, err := service.CalculateChange(candle, period.Interval, period)
 		if err != nil {
-			outcomes[symbol] = fetchOutcome{
-				result: notification.PriceResult{Change: domain.PriceChange{Symbol: symbol}, Unavailable: true},
+			outcomes[key] = fetchOutcome{
+				result: notification.PriceResult{Change: domain.PriceChange{Symbol: key.symbol}, Unavailable: true},
 			}
 			continue
 		}
-		outcomes[symbol] = fetchOutcome{
+		outcomes[key] = fetchOutcome{
 			result: notification.PriceResult{Change: change},
 		}
 	}
@@ -179,14 +227,14 @@ func (e *TargetExecutor) Execute(ctx context.Context, now time.Time, interval do
 	return firstErr
 }
 
-func (e *TargetExecutor) deliverToTarget(ctx context.Context, target domain.AlertTarget, period domain.Period, pending []pendingJob, outcomes map[string]fetchOutcome) error {
+func (e *TargetExecutor) deliverToTarget(ctx context.Context, target domain.AlertTarget, period domain.Period, pending []pendingJob, outcomes map[fetchKey]fetchOutcome) error {
 	type item struct {
 		job    domain.Job
 		result notification.PriceResult
 	}
 	items := make([]item, 0, len(pending))
 	for _, p := range pending {
-		outcome, ok := outcomes[p.symbol]
+		outcome, ok := outcomes[fetchKey{provider: p.job.MarketProvider, symbol: p.symbol}]
 		if !ok {
 			outcome = fetchOutcome{
 				result: notification.PriceResult{Change: domain.PriceChange{Symbol: p.symbol}, Unavailable: true},
@@ -239,6 +287,11 @@ type pendingJob struct {
 // fetchOutcome is the shared per-symbol result for one round.
 type fetchOutcome struct {
 	result notification.PriceResult
+}
+
+type fetchKey struct {
+	provider domain.MarketProvider
+	symbol   string
 }
 
 func containsInterval(values []domain.Interval, wanted domain.Interval) bool {
