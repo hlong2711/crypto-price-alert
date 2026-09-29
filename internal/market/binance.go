@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"maps"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,14 +16,13 @@ const defaultBinanceURL = "https://api.binance.com"
 
 type BinanceProvider struct {
 	baseURL     string
-	symbols     map[string]string
 	client      *http.Client
 	maxAttempts int
 	backoff     time.Duration
 	semaphore   chan struct{}
 }
 
-func NewBinanceProvider(baseURL string, client *http.Client, maxAttempts int, backoff time.Duration, concurrency int, mappings ...map[string]string) (*BinanceProvider, error) {
+func NewBinanceProvider(baseURL string, client *http.Client, maxAttempts int, backoff time.Duration, concurrency int) (*BinanceProvider, error) {
 	if baseURL == "" {
 		baseURL = defaultBinanceURL
 	}
@@ -34,13 +32,8 @@ func NewBinanceProvider(baseURL string, client *http.Client, maxAttempts int, ba
 	if maxAttempts < 1 || backoff <= 0 || concurrency < 1 {
 		return nil, fmt.Errorf("invalid Binance provider settings")
 	}
-	symbols := make(map[string]string)
-	if len(mappings) > 0 {
-		maps.Copy(symbols, mappings[0])
-	}
 	return &BinanceProvider{
 		baseURL:     baseURL,
-		symbols:     symbols,
 		client:      client,
 		maxAttempts: maxAttempts,
 		backoff:     backoff,
@@ -59,17 +52,10 @@ func (p *BinanceProvider) GetKline(ctx context.Context, symbol string, interval 
 		return domain.Candle{}, ctx.Err()
 	}
 
-	requestSymbol := symbol
-	if mapped, ok := p.symbols[symbol]; len(p.symbols) > 0 {
-		if !ok || mapped == "" {
-			return domain.Candle{}, fmt.Errorf("Binance symbol %q is not configured", symbol)
-		}
-		requestSymbol = mapped
-	}
 	url := fmt.Sprintf(
 		"%s/api/v3/klines?symbol=%s&interval=%s&startTime=%d&endTime=%d&limit=1",
 		p.baseURL,
-		requestSymbol,
+		symbol,
 		interval,
 		start.UnixMilli(),
 		end.UnixMilli(),
@@ -152,23 +138,6 @@ func (p *BinanceProvider) request(ctx context.Context, url, symbol string, start
 			values[i] = string(rawValue)
 		}
 	}
-
-	candle, retry, err := p.parseToCandle(values)
-	if err != nil {
-		return domain.Candle{}, false, err
-	}
-	candle.Symbol = symbol
-
-	if err := candle.Validate(); err != nil {
-		return domain.Candle{}, false, err
-	}
-	return candle, retry, err
-}
-
-// parse raw data of array to candle form
-//
-// return the candle data (without the symbol)
-func (p *BinanceProvider) parseToCandle(values []string) (domain.Candle, bool, error) {
 	openTimeMS, err := strconv.ParseInt(values[0], 10, 64)
 	if err != nil {
 		return domain.Candle{}, false, fmt.Errorf("parse kline open time: %w", err)
@@ -205,7 +174,7 @@ func (p *BinanceProvider) parseToCandle(values []string) (domain.Candle, bool, e
 		return domain.Candle{}, false, err
 	}
 	candle := domain.Candle{
-		// Symbol:    symbol,
+		Symbol:    symbol,
 		Open:      open,
 		High:      high,
 		Low:       low,
@@ -215,8 +184,11 @@ func (p *BinanceProvider) parseToCandle(values []string) (domain.Candle, bool, e
 		CloseTime: time.UnixMilli(closeTimeMS),
 	}
 
-	// if candle.OpenTime.Before(start) || candle.OpenTime.After(end) {
-	// 	return domain.Candle{}, false, fmt.Errorf("kline is outside requested period")
-	// }
+	if err := candle.Validate(); err != nil {
+		return domain.Candle{}, false, err
+	}
+	if candle.OpenTime.Before(start) || candle.OpenTime.After(end) {
+		return domain.Candle{}, false, fmt.Errorf("kline is outside requested period")
+	}
 	return candle, false, nil
 }

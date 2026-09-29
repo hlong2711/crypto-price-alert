@@ -17,7 +17,6 @@ type ConfigSession struct {
 	TargetID          string
 	ActorUserID       string
 	BaseConfigVersion int64
-	SelectedProvider  domain.MarketProvider
 	SelectedSymbols   []string
 	SelectedIntervals []domain.Interval
 	ExpiresAt         time.Time
@@ -119,7 +118,6 @@ func NewConfigSession(targetID, actorUserID string, config domain.AlertConfig, t
 		TargetID:          targetID,
 		ActorUserID:       actorUserID,
 		BaseConfigVersion: config.Version,
-		SelectedProvider:  config.MarketProvider,
 		SelectedSymbols:   append([]string(nil), config.Symbols...),
 		SelectedIntervals: append([]domain.Interval(nil), config.Intervals...),
 		ExpiresAt:         time.Now().Add(ttl),
