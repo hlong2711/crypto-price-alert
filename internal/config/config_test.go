@@ -5,13 +5,21 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"crypto-price-alert/internal/domain"
 )
 
 func validConfig() Config {
 	return Config{
-		App:           AppConfig{Timezone: "Asia/Ho_Chi_Minh", HTTP: HTTPConfig{Address: ":8080"}},
-		Database:      DatabaseConfig{URL: "postgres://localhost/crypto_alert"},
-		Market:        MarketConfig{Provider: "binance", Symbols: []string{"BTCUSDT"}, Intervals: []string{"1h", "4h"}},
+		App:      AppConfig{Timezone: "Asia/Ho_Chi_Minh", HTTP: HTTPConfig{Address: ":8080"}},
+		Database: DatabaseConfig{URL: "postgres://localhost/crypto_alert"},
+		Market: MarketConfig{
+			DefaultProvider: domain.MarketProviderBinance,
+			Symbols:         []string{"BTC"}, Intervals: []string{"1h", "4h"},
+			Providers: map[domain.MarketProvider]ProviderConfig{
+				domain.MarketProviderBinance: {Enabled: true, Symbols: map[string]ProviderSymbolConfig{"BTC": {Symbol: "BTCUSDT"}}},
+			},
+		},
 		Schedule:      ScheduleConfig{ActiveFrom: "06:00", ActiveUntil: "23:00"},
 		Notifications: NotificationsConfig{Telegram: TelegramConfig{Enabled: true, BotToken: "token", ChatID: "chat"}},
 		Retry:         RetryConfig{MaxAttempts: 3, InitialBackoff: 500 * time.Millisecond},
@@ -22,6 +30,24 @@ func validConfig() Config {
 func TestConfigValidate(t *testing.T) {
 	if err := validConfig().Validate(); err != nil {
 		t.Fatalf("expected valid config, got %v", err)
+	}
+}
+
+func TestConfigValidateNotificationJobsRetention(t *testing.T) {
+	cfg := validConfig()
+	cfg.Database.NotificationJobsRetention = 720 * time.Hour
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected positive retention to validate, got %v", err)
+	}
+
+	cfg.Database.NotificationJobsRetention = 0
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected zero retention to disable cleanup, got %v", err)
+	}
+
+	cfg.Database.NotificationJobsRetention = -time.Second
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected negative retention to fail validation")
 	}
 }
 
@@ -83,10 +109,16 @@ func TestLoadExpandsEnvironmentVariables(t *testing.T) {
     address: ":8080"
 database:
   url: "${TEST_DATABASE_URL}"
+  notification_jobs_retention: 720h
 market:
-  provider: binance
-  symbols: [BTCUSDT]
+  default_provider: binance
+  symbols: [BTC]
   intervals: [1h]
+  providers:
+    binance:
+      enabled: true
+      symbols:
+        BTC: {symbol: BTCUSDT}
 schedule:
   active_from: "06:00"
   active_until: "23:00"
@@ -111,6 +143,9 @@ concurrency:
 	}
 	if cfg.Database.URL != "postgres://example/crypto_alert" {
 		t.Fatalf("unexpected database URL: %q", cfg.Database.URL)
+	}
+	if cfg.Database.NotificationJobsRetention != 720*time.Hour {
+		t.Fatalf("unexpected notification job retention: %v", cfg.Database.NotificationJobsRetention)
 	}
 	if !cfg.Notifications.Dry {
 		t.Fatal("expected notifications.dry to be true")

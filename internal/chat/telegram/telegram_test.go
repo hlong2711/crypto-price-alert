@@ -13,6 +13,7 @@ import (
 
 	"crypto-price-alert/internal/chat"
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/market"
 
 	"github.com/labstack/echo/v4"
 )
@@ -111,7 +112,7 @@ func (f *fakeCommands) Handle(_ context.Context, command chat.Command) (string, 
 	}
 	return "ok", nil
 }
-func (f *fakeCommands) UpdateSession(ctx context.Context, command chat.Command, symbols []string, intervals []domain.Interval) error {
+func (f *fakeCommands) UpdateSession(ctx context.Context, command chat.Command, provider domain.MarketProvider, symbols []string, intervals []domain.Interval) error {
 	f.updates++
 	if f.sessions != nil && len(command.Arguments) == 1 {
 		session, err := f.sessions.Get(ctx, command.Arguments[0])
@@ -119,6 +120,7 @@ func (f *fakeCommands) UpdateSession(ctx context.Context, command chat.Command, 
 			return err
 		}
 		session.SelectedSymbols = append([]string(nil), symbols...)
+		session.SelectedProvider = provider
 		session.SelectedIntervals = append([]domain.Interval(nil), intervals...)
 		return f.sessions.Update(ctx, session)
 	}
@@ -133,11 +135,17 @@ func newAdapter(t *testing.T, httpClient *http.Client, events *fakeEvents, comma
 	if err != nil {
 		t.Fatal(err)
 	}
-	adapter, err := NewAdapter(client, &fakeTargets{}, events, commands, sessions, "secret", "bot", []string{"BTCUSDT"}, []domain.Interval{domain.Interval1H})
+	adapter, err := NewAdapter(client, &fakeTargets{}, events, commands, sessions, "secret", "bot", []string{"BTCUSDT"}, []domain.Interval{domain.Interval1H}, market.NewStaticProviderResolver(testMarketProvider{}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return adapter
+}
+
+type testMarketProvider struct{}
+
+func (testMarketProvider) GetKline(context.Context, string, domain.Interval, time.Time, time.Time) (domain.Candle, error) {
+	return domain.Candle{}, nil
 }
 
 func postTelegramUpdate(t *testing.T, adapter *Adapter, update Update) int {

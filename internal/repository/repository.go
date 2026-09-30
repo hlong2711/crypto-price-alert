@@ -11,3 +11,7 @@ type JobRepository interface {
 	MarkSent(ctx context.Context, id string, sentAt time.Time) error
 	MarkFailed(ctx context.Context, id string, reason string) error
 }
+
+type NotificationJobCleanupRepository interface {
+	DeleteNotificationJobsUpdatedBefore(ctx context.Context, cutoff time.Time, limit int) (int64, error)
+}
