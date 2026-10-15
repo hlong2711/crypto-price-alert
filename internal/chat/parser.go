@@ -15,6 +15,7 @@ var commandActions = map[string]CommandAction{
 	"test":      ActionTest,
 	"save":      ActionSave,
 	"cancel":    ActionCancel,
+	"funding":   ActionFunding,
 }
 
 // ParseCommand normalizes plain text and slash-command input. Platform adapters

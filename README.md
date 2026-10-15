@@ -4,6 +4,25 @@ Backend service for scheduled crypto price notifications.
 
 The implementation plans are documented in `docs/plans/`.
 
+## Positive futures funding rates
+
+- API: `GET /api/v1/funding-rates?limit=5`
+- Telegram: `/funding` or `/funding 10` (requires the existing Telegram chat adapter).
+
+Returns positive Binance USDⓈ-M perpetual funding rates for USDT/USDC pairs,
+ranked descending, including each pair's interval and next payment time (UTC).
+Default limit is 5; allowed limits are 5–20. If fewer positive pairs exist, the
+response explicitly reports the shortfall. Rates come directly from Binance;
+next-payment rates are not guaranteed.
+
+```bash
+curl 'http://localhost:8080/api/v1/funding-rates?limit=5'
+```
+
+Funding is enabled by default; set `funding.enabled: false` to disable it without
+changing price alerts. The read-only API does not send Telegram messages.
+See [feature documentation and change tracking](docs/features/funding-rate/README.md).
+
 ## Local Docker setup
 
 Copy `.env.example` to `.env`, fill notification secrets as needed, then run:

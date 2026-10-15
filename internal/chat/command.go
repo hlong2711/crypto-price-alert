@@ -20,6 +20,7 @@ const (
 	ActionTest      CommandAction = "test"
 	ActionSave      CommandAction = "save"
 	ActionCancel    CommandAction = "cancel"
+	ActionFunding   CommandAction = "funding"
 )
 
 // CommandDefinition describes a user-facing command supported by chat adapters.
@@ -42,6 +43,19 @@ var publicCommandDefinitions = []CommandDefinition{
 // native command menus. The returned slice is independent of package state.
 func PublicCommandDefinitions() []CommandDefinition {
 	return append([]CommandDefinition(nil), publicCommandDefinitions...)
+}
+
+// PublicCommandDefinitionsFor keeps Telegram-only operations out of Slack menus.
+func PublicCommandDefinitionsFor(provider domain.ChatProvider) []CommandDefinition {
+	definitions := PublicCommandDefinitions()
+	if provider == domain.ChatProviderTelegram {
+		definitions = append(definitions, CommandDefinition{
+			Action:      ActionFunding,
+			Command:     "funding",
+			Description: "Show top positive futures funding rates",
+		})
+	}
+	return definitions
 }
 
 func (a CommandAction) IsMutation() bool {

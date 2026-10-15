@@ -138,7 +138,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	initServer(logger, cfg, cfg.App.HTTP.Address, alertService, periods, jobRepo, registry)
+	var funding api.FundingReader
+	fundingService, err := newFundingService(cfg, logger)
+	if err != nil {
+		logger.Error("failed to initialize funding service", "error", err)
+		os.Exit(1)
+	}
+	if fundingService != nil {
+		defer fundingService.Close()
+		funding = fundingService
+	}
+
+	initServer(logger, cfg, cfg.App.HTTP.Address, alertService, periods, jobRepo, registry, funding)
+}
+
+func newFundingService(cfg config.Config, logger *slog.Logger) (*service.FundingService, error) {
+	if !cfg.Funding.Enabled {
+		return nil, nil
+	}
+	provider, err := market.NewBinanceFuturesProvider(cfg.Funding.BaseURL, &http.Client{Timeout: cfg.Funding.RequestTimeout}, cfg.Retry.MaxAttempts, cfg.Retry.InitialBackoff)
+	if err != nil {
+		return nil, err
+	}
+	return service.NewFundingService(provider, service.FundingSettings{
+		SnapshotTTL:    cfg.Funding.SnapshotTTL,
+		ExchangeTTL:    cfg.Funding.ExchangeTTL,
+		IntervalTTL:    cfg.Funding.IntervalTTL,
+		RefreshTimeout: cfg.Funding.RefreshTimeout,
+	}, logger)
 }
 
 func startNotificationJobCleanup(
@@ -260,11 +287,12 @@ func notifierNames(cfg config.Config) []string {
 	return names
 }
 
-func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine, repo *repository.PostgresRepository, providers *market.ProviderRegistry) {
+func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *service.AlertService, periods *scheduler.PeriodEngine, repo *repository.PostgresRepository, providers *market.ProviderRegistry, funding api.FundingReader) {
 	e := api.NewServer(alerts, periods)
+	api.RegisterFundingRoutes(e, funding)
 
 	if cfg.Chat.Enabled && cfg.Chat.Telegram.Enabled {
-		chatHandler, err := newTelegramChatHandler(cfg, repo, providers)
+		chatHandler, err := newTelegramChatHandler(cfg, repo, providers, funding)
 		if err != nil {
 			logger.Error("failed to initialize Telegram chat handler", "error", err)
 			os.Exit(1)
@@ -330,7 +358,7 @@ func initServer(logger *slog.Logger, cfg config.Config, address string, alerts *
 	}
 }
 
-func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresRepository, providers *market.ProviderRegistry) (*telegram.Adapter, error) {
+func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresRepository, providers *market.ProviderRegistry, funding chat.FundingReader) (*telegram.Adapter, error) {
 	allowedIntervals := make([]domain.Interval, 0, len(cfg.Market.Intervals))
 	for _, value := range cfg.Market.Intervals {
 		allowedIntervals = append(allowedIntervals, domain.Interval(value))
@@ -340,7 +368,7 @@ func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresReposito
 		return nil, err
 	}
 	sessions := chat.NewMemorySessionStore()
-	chatService, err := chat.NewService(configurationService, chat.CreatorAuthorizer{}, sessions, 15*time.Minute)
+	chatService, err := chat.NewService(configurationService, chat.CreatorAuthorizer{}, sessions, 15*time.Minute, chat.WithFundingReader(funding))
 	if err != nil {
 		return nil, err
 	}

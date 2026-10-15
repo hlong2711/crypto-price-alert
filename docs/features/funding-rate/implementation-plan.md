@@ -1,6 +1,8 @@
 # Positive Funding Rates — Detailed Implementation Plan
 
-Status: planned; no application changes implemented.
+Status: implemented (FR-00–FR-15); automated checks and live Binance API smoke
+passed. Real Telegram delivery awaits an explicitly selected deployment test group.
+See [tracking](tracking.md) and [verification](verification.md).
 Source specification: `docs/funding-rate.md`.
 Planning date: 2026-10-14.
 
@@ -58,7 +60,7 @@ These are explicit implementation defaults, not additional source requirements:
 | `internal/chat/telegram/webhook.go` | Existing processing already parses commands, dispatches, sends text, validates secrets, and deduplicates updates. Reuse this path. |
 | `cmd/server/main.go` | Construct one futures provider and one funding service, then inject the same service into HTTP and Telegram wiring. |
 | `internal/config/config.go` | Add backward-compatible funding defaults; preserve existing configurations. |
-| `docs/funding-rate.md` | Original specification; currently untracked. Preserve its content and do not overwrite it. |
+| `docs/funding-rate.md` | Original specification, committed with the plan. Preserve its requirements; link feature records. |
 
 Existing Telegram target lookup calls `getChatAdministrators` and discovers a chat
 creator before dispatching any command. This is an inherited prerequisite for
@@ -97,9 +99,9 @@ Official reference links:
 - https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Mark-Price
 - https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-Info
 
-Planning limitation: these URLs returned HTTP 202 with empty bodies from this
-environment. Endpoint choices above must be reverified; no claim of successful
-live schema validation is made.
+Planning limitation: the original URLs returned HTTP 202 with empty bodies.
+FR-01 resolved verification using official `/legacy-docs/` pages, Binance's
+funding FAQ, and live public requests. See the feature README for evidence.
 
 ## 4. Architecture and flowcharts
 
@@ -285,7 +287,7 @@ Do not mark a step complete until its acceptance checks pass.
 
 ### FR-00 — Establish baseline and feature records
 
-- Inspect current worktree; preserve user changes and the untracked source spec.
+- Inspect current worktree; preserve user changes and the source spec.
 - Run `go test ./...`, `go vet ./...`, and `go build ./...`; record pre-existing
   failures separately rather than expanding this feature to fix them.
 - Create `docs/features/funding-rate/` and the documentation files in section 9.
@@ -446,26 +448,25 @@ user authorization; tracking documents may use pending commit references.
 
 ## 8. Acceptance checklist
 
-- [ ] All trading USDT and USDC perpetuals are considered, not only saved symbols.
-- [ ] Positive-only results; at least five whenever five valid candidates exist.
-- [ ] Raw rates sorted numerically descending; deterministic tie ordering.
-- [ ] Each result includes symbol, exact funding rate, correct per-symbol interval,
+- [x] All trading USDT and USDC perpetuals are considered, not only saved symbols.
+- [x] Positive-only results; at least five whenever five valid candidates exist.
+- [x] Raw rates sorted numerically descending; deterministic tie ordering.
+- [x] Each result includes symbol, exact funding rate, correct per-symbol interval,
       next settlement time, and observation time.
-- [ ] Non-default funding cadence works; interval-request failure is not a default.
-- [ ] Shortfall/empty results are explicit and distinct from upstream failure.
-- [ ] HTTP endpoint and Telegram command share service rules and cached data.
-- [ ] Telegram authentication/deduplication and existing authorization still work.
-- [ ] HTTP GET and funding command do not modify alert settings or place trades.
-- [ ] Cache never knowingly serves a past next-settlement time as upcoming.
-- [ ] Bulk requests, cache, throttling, retry budgets, and cooldown bound upstream load.
-- [ ] Spot alerts, scheduler, Slack commands, health, and old configs do not regress.
-- [ ] All automated checks pass; any skipped live checks have a documented reason.
-- [ ] Feature tracking documents are complete and contain no secrets.
+- [x] Non-default funding cadence works; interval-request failure is not a default.
+- [x] Shortfall/empty results are explicit and distinct from upstream failure.
+- [x] HTTP endpoint and Telegram command share service rules and cached data.
+- [x] Telegram authentication/deduplication and existing authorization still work.
+- [x] HTTP GET and funding command do not modify alert settings or place trades.
+- [x] Cache never knowingly serves a past next-settlement time as upcoming.
+- [x] Bulk requests, cache, throttling, retry budgets, and cooldown bound upstream load.
+- [x] Spot alerts, scheduler, Slack commands, health, and old configs do not regress.
+- [x] All automated checks pass; any skipped live checks have a documented reason.
+- [x] Feature tracking documents are complete and contain no secrets.
 
 ## 9. Feature documentation and change tracking
 
-Target repository structure (the implementation plan is present; the remaining
-feature records will be created during FR-00):
+Repository feature records (created and maintained during implementation):
 
 ```text
 docs/
@@ -516,5 +517,7 @@ feature-docs link without removing existing planning documentation.
 This plan was moved from the external planning directory to
 `docs/features/funding-rate/implementation-plan.md` with user authorization.
 The original specification remains unchanged at `docs/funding-rate.md`.
-Implementation, baseline verification, and the remaining feature tracking records
-have not started; execute FR-00 before marking any implementation task complete.
+Baseline verification, application implementation, and feature tracking records
+are complete. Live Binance validation additionally required accepting bounded
+Unicode symbols and counting Telegram message length in UTF-16 units; both have
+regression tests. The only unperformed manual check is real Telegram delivery.

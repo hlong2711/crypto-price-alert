@@ -31,6 +31,15 @@ market:
       unit: usd
       symbols: {}
 
+funding:
+  enabled: true
+  base_url: https://fapi.binance.com
+  request_timeout: 10s
+  refresh_timeout: 15s
+  snapshot_ttl: 15s
+  exchange_ttl: 5m
+  interval_ttl: 1m
+
 schedule:
   active_from: "06:00"
   active_until: "23:00"

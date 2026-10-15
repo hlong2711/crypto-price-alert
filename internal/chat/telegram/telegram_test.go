@@ -254,7 +254,7 @@ func TestAPIClientAndCommandRegistration(t *testing.T) {
 	if err := json.Unmarshal(commandPayload, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if len(payload.Commands) != 6 || payload.Commands[1].Command != "configure" {
+	if len(payload.Commands) != 7 || payload.Commands[1].Command != "configure" || payload.Commands[6].Command != "funding" {
 		t.Fatalf("unexpected command catalog: %+v", payload.Commands)
 	}
 }
