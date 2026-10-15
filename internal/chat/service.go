@@ -29,14 +29,28 @@ type Service struct {
 	authorizer    Authorizer
 	sessions      SessionStore
 	sessionTTL    time.Duration
+	funding       FundingReader
+}
+
+type ServiceOption func(*Service)
+
+// WithFundingReader is optional so existing Slack/test construction stays valid.
+func WithFundingReader(reader FundingReader) ServiceOption {
+	return func(s *Service) { s.funding = reader }
 }
 
 // NewService creates a shared chat command service.
-func NewService(configuration ConfigurationService, authorizer Authorizer, sessions SessionStore, sessionTTL time.Duration) (*Service, error) {
+func NewService(configuration ConfigurationService, authorizer Authorizer, sessions SessionStore, sessionTTL time.Duration, options ...ServiceOption) (*Service, error) {
 	if configuration == nil || authorizer == nil || sessions == nil || sessionTTL <= 0 {
 		return nil, fmt.Errorf("invalid chat service settings")
 	}
-	return &Service{configuration: configuration, authorizer: authorizer, sessions: sessions, sessionTTL: sessionTTL}, nil
+	s := &Service{configuration: configuration, authorizer: authorizer, sessions: sessions, sessionTTL: sessionTTL}
+	for _, option := range options {
+		if option != nil {
+			option(s)
+		}
+	}
+	return s, nil
 }
 
 // Handle authorizes and executes a normalized command.
@@ -54,8 +68,16 @@ func (s *Service) Handle(ctx context.Context, command Command) (string, error) {
 		}
 	}
 	switch command.Action {
+	case ActionFunding:
+		return s.handleFunding(ctx, command)
+
 	case ActionHelp:
-		return "help, configure, show, enable, pause, test", nil
+		definitions := PublicCommandDefinitionsFor(command.Target.Provider)
+		names := make([]string, 0, len(definitions))
+		for _, definition := range definitions {
+			names = append(names, definition.Command)
+		}
+		return strings.Join(names, ", "), nil
 
 	case ActionShow:
 		config, err := s.configuration.GetConfig(ctx, command.Target.ID)

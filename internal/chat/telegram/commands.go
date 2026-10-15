@@ -13,7 +13,7 @@ import (
 
 // create command list for bot from generic chat command definition
 func botCommands() []BotCommand {
-	definitions := chat.PublicCommandDefinitions()
+	definitions := chat.PublicCommandDefinitionsFor(domain.ChatProviderTelegram)
 	commands := make([]BotCommand, 0, len(definitions))
 	for _, definition := range definitions {
 		commands = append(commands, BotCommand{Command: definition.Command, Description: definition.Description})

@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -22,6 +23,29 @@ type Config struct {
 	Chat          ChatConfig          `yaml:"chat"`
 	Retry         RetryConfig         `yaml:"retry"`
 	Concurrency   ConcurrencyConfig   `yaml:"concurrency"`
+	Funding       FundingConfig       `yaml:"funding"`
+}
+
+type FundingConfig struct {
+	Enabled        bool          `yaml:"enabled"`
+	BaseURL        string        `yaml:"base_url"`
+	RequestTimeout time.Duration `yaml:"request_timeout"`
+	RefreshTimeout time.Duration `yaml:"refresh_timeout"`
+	SnapshotTTL    time.Duration `yaml:"snapshot_ttl"`
+	ExchangeTTL    time.Duration `yaml:"exchange_ttl"`
+	IntervalTTL    time.Duration `yaml:"interval_ttl"`
+}
+
+func DefaultFundingConfig() FundingConfig {
+	return FundingConfig{
+		Enabled:        true,
+		BaseURL:        "https://fapi.binance.com",
+		RequestTimeout: 10 * time.Second,
+		RefreshTimeout: 15 * time.Second,
+		SnapshotTTL:    15 * time.Second,
+		ExchangeTTL:    5 * time.Minute,
+		IntervalTTL:    time.Minute,
+	}
 }
 
 type AppConfig struct {
@@ -121,7 +145,7 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
 
-	var cfg Config
+	cfg := Config{Funding: DefaultFundingConfig()}
 	expanded := os.ExpandEnv(string(data))
 	if err := yaml.Unmarshal([]byte(expanded), &cfg); err != nil {
 		return Config{}, fmt.Errorf("parse config: %w", err)
@@ -136,6 +160,15 @@ func Load(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if c.Funding.Enabled {
+		u, err := url.Parse(c.Funding.BaseURL)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+			return errors.New("funding.base_url must be an HTTP(S) origin without credentials")
+		}
+		if c.Funding.RequestTimeout <= 0 || c.Funding.RefreshTimeout <= 0 || c.Funding.SnapshotTTL <= 0 || c.Funding.ExchangeTTL <= 0 || c.Funding.IntervalTTL <= 0 {
+			return errors.New("funding timeouts and cache durations must be positive")
+		}
+	}
 	if c.App.Timezone == "" {
 		return errors.New("app.timezone is required")
 	}

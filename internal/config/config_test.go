@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"crypto-price-alert/internal/domain"
+	"gopkg.in/yaml.v3"
 )
 
 func validConfig() Config {
@@ -149,5 +150,37 @@ concurrency:
 	}
 	if !cfg.Notifications.Dry {
 		t.Fatal("expected notifications.dry to be true")
+	}
+	if cfg.Funding != DefaultFundingConfig() {
+		t.Fatalf("old config did not receive funding defaults: %+v", cfg.Funding)
+	}
+}
+
+func TestFundingConfiguration(t *testing.T) {
+	for _, body := range []string{"", "funding:\n  enabled: false\n", "funding:\n  snapshot_ttl: 30s\n"} {
+		cfg := validConfig()
+		cfg.Funding = DefaultFundingConfig()
+		if err := yaml.Unmarshal([]byte(body), &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+		if body != "" && body != "funding:\n  snapshot_ttl: 30s\n" && cfg.Funding.Enabled {
+			t.Fatal("explicit false ignored")
+		}
+	}
+	for _, mutate := range []func(*FundingConfig){
+		func(c *FundingConfig) { c.RequestTimeout = 0 }, func(c *FundingConfig) { c.RefreshTimeout = -1 },
+		func(c *FundingConfig) { c.SnapshotTTL = 0 }, func(c *FundingConfig) { c.ExchangeTTL = 0 }, func(c *FundingConfig) { c.IntervalTTL = 0 },
+		func(c *FundingConfig) { c.BaseURL = "file:///tmp/data" }, func(c *FundingConfig) { c.BaseURL = "https://user:pass@example.com" },
+		func(c *FundingConfig) { c.BaseURL = "https://example.com?key=secret" },
+	} {
+		cfg := validConfig()
+		cfg.Funding = DefaultFundingConfig()
+		mutate(&cfg.Funding)
+		if cfg.Validate() == nil {
+			t.Fatal("accepted invalid funding settings")
+		}
 	}
 }
