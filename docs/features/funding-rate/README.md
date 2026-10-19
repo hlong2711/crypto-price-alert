@@ -81,6 +81,16 @@ returned observation (null when empty); `generated_at` is the cached snapshot's
 generation time. Raw rates stay decimal strings; Telegram converts to percentages
 (0.0005 → +0.05%). Small positive values never display as zero.
 
+The Telegram report is defined by `formatFunding` in
+`internal/chat/funding.go`. Its compact format keeps each rate's interval and
+next funding time, with no introduction or snapshot footer; all timestamps are
+UTC. Shortfall and empty-result notices are retained. Example with a shortfall:
+
+```text
+1. BTCUSDT | +0.05%/8h | next 2026-10-14 16:00 UTC
+Only 1/5 positive pairs available.
+```
+
 - 200: valid results, including an empty array or genuine shortfall.
 - 400: malformed, repeated, empty, or out-of-range limit.
 - 429: local endpoint budget exceeded; Retry-After 1 second.

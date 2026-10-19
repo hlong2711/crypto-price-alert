@@ -35,7 +35,7 @@ func TestFundingReadOnlyDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	message, err := s.Handle(context.Background(), Command{Target: target, ActorUserID: "member", Action: ActionFunding, Arguments: []string{"10"}})
-	if err != nil || calls != 1 || configuration.replaceCalls != 0 || !strings.Contains(message, "+0.05%") || !strings.Contains(message, "every 4h") || !strings.Contains(message, "UTC") || !strings.Contains(message, "Only 1") {
+	if err != nil || calls != 1 || configuration.replaceCalls != 0 || !strings.Contains(message, "+0.05%/4h") || !strings.Contains(message, "UTC") || !strings.Contains(message, "Only 1/10") {
 		t.Fatal(message, err, calls)
 	}
 	for _, args := range [][]string{{"4"}, {"5", "10"}, {"5.0"}, {""}} {
@@ -72,6 +72,23 @@ func TestFundingEmptyErrorAndDisabled(t *testing.T) {
 	message, err = s.Handle(context.Background(), command)
 	if err != nil || !strings.Contains(message, "No eligible positive-rate pairs") {
 		t.Fatal(message, err)
+	}
+}
+
+func TestFundingCompactReport(t *testing.T) {
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	result := domain.FundingRateResult{
+		RequestedLimit: 5, ReturnedCount: 1, Shortfall: true, GeneratedAt: now,
+		Data: []domain.FundingRate{{
+			Symbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT", Rate: "0.0005", IntervalHours: 8,
+			NextFundingTime: time.Date(2026, 10, 15, 0, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60)),
+		}},
+	}
+	message, err := formatFunding(result)
+	want := "1. BTCUSDT | +0.05%/8h | next 2026-10-14 16:00 UTC\n" +
+		"Only 1/5 positive pairs available."
+	if err != nil || message != want {
+		t.Fatalf("formatFunding() = %q, %v; want %q", message, err, want)
 	}
 }
 

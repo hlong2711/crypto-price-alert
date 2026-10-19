@@ -50,7 +50,6 @@ func formatFunding(result domain.FundingRateResult) (string, error) {
 		return "", fmt.Errorf("too many funding rows")
 	}
 	var b strings.Builder
-	b.WriteString("Positive funding rates — Binance USDⓈ-M\nLongs pay shorts. Ranked by rate per funding interval.\nLatest reported rates; next-payment rates are not guaranteed.\n")
 	if len(result.Data) == 0 {
 		b.WriteString("No eligible positive-rate pairs available.\n")
 	}
@@ -62,14 +61,13 @@ func formatFunding(result domain.FundingRateResult) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		fmt.Fprintf(&b, "%d. %s | %s | every %dh | next %s UTC\n", i+1, row.Symbol, percent, row.IntervalHours, row.NextFundingTime.UTC().Format("2006-01-02 15:04"))
+		fmt.Fprintf(&b, "%d. %s | %s/%dh | next %s UTC\n", i+1, row.Symbol, percent, row.IntervalHours, row.NextFundingTime.UTC().Format("2006-01-02 15:04"))
 	}
 	if result.Shortfall {
-		fmt.Fprintf(&b, "Only %d eligible positive-rate pairs available (requested %d).\n", result.ReturnedCount, result.RequestedLimit)
+		fmt.Fprintf(&b, "Only %d/%d positive pairs available.\n", result.ReturnedCount, result.RequestedLimit)
 	}
-	fmt.Fprintf(&b, "Snapshot: %s UTC", result.GeneratedAt.UTC().Format("2006-01-02 15:04:05"))
 	if len(utf16.Encode([]rune(b.String()))) > 4096 {
 		return "", fmt.Errorf("funding message exceeds Telegram limit")
 	}
-	return b.String(), nil
+	return strings.TrimSuffix(b.String(), "\n"), nil
 }

@@ -17,6 +17,7 @@ import (
 	"crypto-price-alert/internal/api"
 	"crypto-price-alert/internal/chat"
 	"crypto-price-alert/internal/domain"
+	"crypto-price-alert/internal/market"
 	"crypto-price-alert/internal/service"
 
 	"github.com/labstack/echo/v4"
@@ -81,7 +82,7 @@ func fundingAdapter(t *testing.T, upstreamErr error) (*Adapter, *countedFundingR
 		t.Fatal(err)
 	}
 	events := &fakeEvents{}
-	adapter, err := NewAdapter(client, &fakeTargets{}, events, commands, sessions, "secret", "bot", []string{"BTCUSDT"}, []domain.Interval{domain.Interval1H})
+	adapter, err := NewAdapter(client, &fakeTargets{}, events, commands, sessions, "secret", "bot", []string{"BTCUSDT"}, []domain.Interval{domain.Interval1H}, market.NewStaticProviderResolver(&testMarketProvider{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +96,7 @@ func TestFundingWebhookAndAPIUseSameSnapshot(t *testing.T) {
 		t.Fatal(code)
 	}
 	text := lastPayloadForMethod(t, *calls, "sendMessage")["text"].(string)
-	if !strings.Contains(text, "1. C09USDC | +1% | every 4h") || !strings.Contains(text, "5. C05USDC") || strings.Contains(text, "6. C04USDC") || !events.processed || events.failed {
+	if !strings.Contains(text, "1. C09USDC | +1%/4h") || !strings.Contains(text, "5. C05USDC") || strings.Contains(text, "6. C04USDC") || !events.processed || events.failed {
 		t.Fatal(text, events)
 	}
 	postTelegramUpdate(t, adapter, update)
