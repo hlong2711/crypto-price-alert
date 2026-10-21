@@ -30,9 +30,15 @@ type Service struct {
 	sessions      SessionStore
 	sessionTTL    time.Duration
 	funding       FundingReader
+	publicIP      PublicIPReader
 }
 
 type ServiceOption func(*Service)
+
+// WithPublicIPReader adds an outbound public IP footer to Telegram funding reports.
+func WithPublicIPReader(reader PublicIPReader) ServiceOption {
+	return func(s *Service) { s.publicIP = reader }
+}
 
 // WithFundingReader is optional so existing Slack/test construction stays valid.
 func WithFundingReader(reader FundingReader) ServiceOption {

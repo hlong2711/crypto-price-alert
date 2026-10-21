@@ -84,11 +84,17 @@ generation time. Raw rates stay decimal strings; Telegram converts to percentage
 The Telegram report is defined by `formatFunding` in
 `internal/chat/funding.go`. Its compact format keeps each rate's interval and
 next funding time, with no introduction or snapshot footer; all timestamps are
-UTC. Shortfall and empty-result notices are retained. Example with a shortfall:
+UTC. Shortfall and empty-result notices are retained. Telegram reports include
+the app's outbound public IP (the NAT/proxy egress IP, not the container's private
+address). This is visible to group members. An HTTPS lookup to `api.ipify.org`
+has a 2-second timeout; results are cached for 5 minutes and failures for 30
+seconds. Lookup failure shows `Public IP: unavailable` without losing the report.
+The HTTP API is unchanged. Example with a shortfall:
 
 ```text
 1. BTCUSDT | +0.05%/8h | next 2026-10-14 16:00 UTC
 Only 1/5 positive pairs available.
+Public IP: 203.0.113.10
 ```
 
 - 200: valid results, including an empty array or genuine shortfall.

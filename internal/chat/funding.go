@@ -42,6 +42,16 @@ func (s *Service) handleFunding(ctx context.Context, command Command) (string, e
 	if err != nil {
 		return fundingTemporary, nil
 	}
+	if s.publicIP != nil {
+		ip := "unavailable"
+		if address, err := s.publicIP.PublicIP(ctx); err == nil && address.IsValid() {
+			ip = address.String()
+		}
+		message += "\nPublic IP: " + ip
+		if len(utf16.Encode([]rune(message))) > 4096 {
+			return fundingTemporary, nil
+		}
+	}
 	return message, nil
 }
 

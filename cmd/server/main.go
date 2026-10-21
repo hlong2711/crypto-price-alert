@@ -368,7 +368,14 @@ func newTelegramChatHandler(cfg config.Config, repo *repository.PostgresReposito
 		return nil, err
 	}
 	sessions := chat.NewMemorySessionStore()
-	chatService, err := chat.NewService(configurationService, chat.CreatorAuthorizer{}, sessions, 15*time.Minute, chat.WithFundingReader(funding))
+	chatService, err := chat.NewService(
+		configurationService,
+		chat.CreatorAuthorizer{},
+		sessions,
+		15*time.Minute,
+		chat.WithFundingReader(funding),
+		chat.WithPublicIPReader(chat.NewPublicIPResolver()),
+	)
 	if err != nil {
 		return nil, err
 	}
